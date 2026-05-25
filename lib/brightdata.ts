@@ -133,8 +133,17 @@ export async function triggerWebScraperJob(
  * Since Vercel Serverless Functions have small size limits, Puppeteer should run via connection string.
  */
 export function getScrapingBrowserConnectOptions(): { browserWSEndpoint: string } {
-  // Connection string format for Bright Data Scraping Browser
-  const endpoint = `ws://brd-customer-${BRIGHTDATA_CUSTOMER_ID}-zone-scraping_browser:${BRIGHTDATA_PASSWORD}@brd.superproxy.io:9222`;
+  const customUrl = process.env.BRIGHTDATA_BROWSER_URL;
+  if (customUrl) {
+    return { browserWSEndpoint: customUrl };
+  }
+
+  const customerId = process.env.BRIGHTDATA_CUSTOMER_ID || 'cust_123';
+  const zone = process.env.BRIGHTDATA_ZONE || 'scraping_browser';
+  const password = process.env.BRIGHTDATA_PASSWORD || 'pass_123';
+  
+  // Connection string format for Bright Data Scraping Browser using secure WebSocket
+  const endpoint = `wss://brd-customer-${customerId}-zone-${zone}:${password}@brd.superproxy.io:9222`;
   return {
     browserWSEndpoint: endpoint,
   };
