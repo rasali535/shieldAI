@@ -301,22 +301,22 @@ app.post('/api/cron/monitor', async (req, res, next) => {
     };
   }
   next();
-}, wrapHandler((req: any) => monitorHandler(req)));
+}, wrapHandler((req: any, res: any) => monitorHandler(req, res)));
 
 app.post('/api/webhook/assess', async (req, res, next) => {
   if (!assessHandler) await loadHandlers();
   next();
-}, wrapHandler((req: any) => assessHandler(req)));
+}, wrapHandler((req: any, res: any) => assessHandler(req, res)));
 
 app.post('/api/webhook/enrich', async (req, res, next) => {
   if (!enrichHandler) await loadHandlers();
   next();
-}, wrapHandler((req: any) => enrichHandler(req)));
+}, wrapHandler((req: any, res: any) => enrichHandler(req, res)));
 
 app.post('/api/webhook/outreach', async (req, res, next) => {
   if (!outreachHandler) await loadHandlers();
   next();
-}, wrapHandler((req: any) => outreachHandler(req)));
+}, wrapHandler((req: any, res: any) => outreachHandler(req, res)));
 
 // Start Server
 const PORT = 3000;
