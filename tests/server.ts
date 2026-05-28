@@ -194,6 +194,8 @@ global.fetch = async (url: any, options: any = {}): Promise<any> => {
       await enrichHandler(mockReq as any, mockRes);
     } else if (route === '/api/webhook/outreach') {
       await outreachHandler(mockReq as any, mockRes);
+    } else if (route === '/api/webhook/voice-ingest') {
+      await voiceIngestHandler(mockReq as any, mockRes);
     }
 
     return {
@@ -250,12 +252,14 @@ let monitorHandler: any;
 let assessHandler: any;
 let enrichHandler: any;
 let outreachHandler: any;
+let voiceIngestHandler: any;
 
 async function loadHandlers() {
   monitorHandler = (await import('../api/cron/monitor')).default;
   assessHandler = (await import('../api/webhook/assess')).default;
   enrichHandler = (await import('../api/webhook/enrich')).default;
   outreachHandler = (await import('../api/webhook/outreach')).default;
+  voiceIngestHandler = (await import('../api/webhook/voice-ingest')).default;
 }
 
 // Wrap Serverless handlers to Express Middleware format
@@ -317,6 +321,11 @@ app.post('/api/webhook/outreach', async (req, res, next) => {
   if (!outreachHandler) await loadHandlers();
   next();
 }, wrapHandler((req: any, res: any) => outreachHandler(req, res)));
+
+app.post('/api/webhook/voice-ingest', async (req, res, next) => {
+  if (!voiceIngestHandler) await loadHandlers();
+  next();
+}, wrapHandler((req: any, res: any) => voiceIngestHandler(req, res)));
 
 // Start Server
 const PORT = 3000;

@@ -196,6 +196,7 @@ global.fetch = async (url: any, options: any = {}): Promise<any> => {
     const { default: assessHandler } = await import('../api/webhook/assess');
     const { default: enrichHandler } = await import('../api/webhook/enrich');
     const { default: outreachHandler } = await import('../api/webhook/outreach');
+    const { default: voiceIngestHandler } = await import('../api/webhook/voice-ingest');
 
     // Run the correct handler based on route
     if (route === '/api/webhook/assess') {
@@ -204,6 +205,8 @@ global.fetch = async (url: any, options: any = {}): Promise<any> => {
       await enrichHandler(mockReq as any, mockRes);
     } else if (route === '/api/webhook/outreach') {
       await outreachHandler(mockReq as any, mockRes);
+    } else if (route === '/api/webhook/voice-ingest') {
+      await voiceIngestHandler(mockReq as any, mockRes);
     } else {
       console.log(`[Mock Fetch] Falling through to 404 else block for route: ${route}`);
       return {
@@ -222,6 +225,50 @@ global.fetch = async (url: any, options: any = {}): Promise<any> => {
       headers: mockHeaders,
       json: async () => responseBody,
       text: async () => JSON.stringify(responseBody),
+    };
+  }
+
+  // Speechmatics API Interceptor
+  if (urlString.includes('speechmatics.com')) {
+    if (urlString.endsWith('/transcript?format=txt')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: mockHeaders,
+        text: async () => 'This is the Security Weekly Briefing. We are tracking a major security incident at AcmeCloud Corp. On May 28, their primary database was compromised via a SQL injection vulnerability, exposing customer records, session tokens, and developer API keys. Security researchers have published an advisory at https://security-advisory.example.com/advisory-102.',
+      };
+    }
+    if (options.method === 'GET' || !options.method) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: mockHeaders,
+        json: async () => ({
+          job: { status: 'done' }
+        })
+      };
+    }
+    return {
+      ok: true,
+      status: 201,
+      statusText: 'Created',
+      headers: mockHeaders,
+      json: async () => ({
+        id: 'mock-speechmatics-job-123'
+      })
+    };
+  }
+
+  // TriggerWare.ai API Interceptor
+  if (urlString.includes('triggerware.com')) {
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: mockHeaders,
+      json: async () => ({ success: true })
     };
   }
 
@@ -349,6 +396,37 @@ async function runTest() {
     console.log(`Subject: ${firstDraft.emailSubject}`);
     console.log(`Body Snippet:\n${firstDraft.emailBody.split('\n').slice(0, 5).join('\n')}...\n`);
     
+    // --- STAGE 5: Voice Alert Ingestion (Speechmatics + AI/ML API) ---
+    console.log('\n[STAGE 5] Triggering Speechmatics Voice Alert Ingestion...');
+    const { default: voiceIngestHandler } = await import('../api/webhook/voice-ingest');
+    
+    let voiceStatus = 200;
+    let voiceData: any = {};
+    const mockVoiceRes = {
+      status: (code: number) => { voiceStatus = code; return mockVoiceRes; },
+      json: (data: any) => { voiceData = data; }
+    } as any;
+
+    await voiceIngestHandler({
+      method: 'POST',
+      headers: {},
+      query: {},
+      body: { audioUrl: 'https://security-advisory.example.com/podcast-episode-4.mp3' }
+    }, mockVoiceRes);
+
+    if (voiceStatus !== 202) {
+      throw new Error(`Voice alert ingestion failed with status: ${voiceStatus}. Data: ${JSON.stringify(voiceData)}`);
+    }
+
+    const voiceRecordId = voiceData.recordId;
+    console.log(`[STAGE 5 SUCCESS] Voice ingest pipeline started. DB Record Created: ${voiceRecordId}`);
+    
+    const voiceRecord = mockDatabase.get(voiceRecordId);
+    console.log(`- Status: ${voiceRecord.status}`);
+    console.log(`- Threat Source: ${voiceRecord.threat_source}`);
+    console.log(`- Transcribed Text Snippet: "${voiceData.transcript.substring(0, 100)}..."`);
+    console.log(`- Threat Vendor parsed: ${voiceRecord.threat_payload.vendorName}`);
+
     console.log('--------------------------------------------------');
     console.log('E2E STATE MACHINE TEST COMPLETED SUCCESSFULLY!');
     console.log('--------------------------------------------------');

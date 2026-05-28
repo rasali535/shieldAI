@@ -2,6 +2,7 @@ import { supabase } from '../../lib/db/client';
 import { searchSerpApi } from '../../lib/brightdata';
 import { ThreatPayloadSchema, ThreatPayload } from '../../types/pipeline';
 import { propagateWebhook } from '../../lib/webhook-helper';
+import { chatCompletion } from '../../lib/aimlapi';
 
 // Interface for standard Vercel Serverless Function signature
 interface VercelRequest {
@@ -44,13 +45,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const primaryResult = searchResults[0];
     
     // Structure threat payload matching schema
-    const threatPayload: ThreatPayload = {
+    let threatPayload: ThreatPayload = {
       vendorName: 'AcmeCloud Corp', // In production, extract this dynamically from result.title
       breachDate: new Date().toISOString().split('T')[0],
       impactDescription: primaryResult.snippet || 'A major data breach exposing client session data and configuration endpoints.',
       advisoryUrl: primaryResult.link || 'https://security-advisory.example.com/advisory-102',
       breachedDataTypes: ['API Keys', 'Customer Records', 'Session Tokens'],
     };
+
+    if (process.env.AIML_API_KEY && process.env.AIML_API_KEY !== 'your_aiml_api_key') {
+      try {
+        console.log('[Agent 1] Analyzing threat indicators with AI/ML API...');
+        const messages = [
+          {
+            role: 'system' as const,
+            content: 'You are an advanced Threat Intelligence AI assistant. Analyze the provided web search results and extract security breach details in strict JSON format.',
+          },
+          {
+            role: 'user' as const,
+            content: `Analyze this search result:
+Title: ${primaryResult.title}
+Link: ${primaryResult.link}
+Snippet: ${primaryResult.snippet}
+
+Please respond with a JSON object matching this schema:
+{
+  "vendorName": "name of vendor breached",
+  "breachDate": "YYYY-MM-DD format (use today's date if not found)",
+  "impactDescription": "detailed impact description (at least 15 characters long describing what happened)",
+  "advisoryUrl": "link to the advisory",
+  "breachedDataTypes": ["array", "of", "breached", "data", "types"]
+}`
+          }
+        ];
+        const aiResponse = await chatCompletion(messages, {
+          response_format: { type: 'json_object' }
+        });
+        if (aiResponse) {
+          const parsed = JSON.parse(aiResponse);
+          if (parsed.vendorName && parsed.impactDescription && parsed.advisoryUrl && Array.isArray(parsed.breachedDataTypes)) {
+            threatPayload = {
+              vendorName: parsed.vendorName,
+              breachDate: parsed.breachDate || new Date().toISOString().split('T')[0],
+              impactDescription: parsed.impactDescription,
+              advisoryUrl: parsed.advisoryUrl,
+              breachedDataTypes: parsed.breachedDataTypes
+            };
+            console.log('[Agent 1] Successfully parsed threat payload dynamically using AI/ML API:', threatPayload);
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Agent 1] AI/ML API parsing failed, falling back to mock structure:', e.message);
+      }
+    }
 
     // 4. Validate the payload using Zod
     const validationResult = ThreatPayloadSchema.safeParse(threatPayload);

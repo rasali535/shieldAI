@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fetch from 'cross-fetch';
 import * as dotenv from 'dotenv';
+import { triggerWorkflowEvent } from './triggerware';
 
 dotenv.config();
 
@@ -64,6 +65,15 @@ export async function propagateWebhook(
 
       if (response.ok) {
         console.log(`[Webhook Propagator] Transition successfully accepted by ${targetUrl} (Status: ${response.status})`);
+        
+        // Trigger event-driven workflow automation in TriggerWare.ai
+        const eventName = `pipeline.${payload.status.toLowerCase()}`;
+        try {
+          await triggerWorkflowEvent(eventName, payload);
+        } catch (twError: any) {
+          console.warn('[Webhook Propagator] TriggerWare automation trigger failed:', twError.message);
+        }
+
         return true;
       }
 
