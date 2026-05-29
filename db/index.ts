@@ -199,3 +199,10 @@ export const db = {
     };
   },
 } as any;
+
+export function hydrateMockStore(record: any) {
+  if (!record || !record.id) return;
+  const store = getStore();
+  store.set(record.id, toSnakeCase(record));
+}
+

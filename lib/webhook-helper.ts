@@ -2,6 +2,9 @@ import crypto from 'crypto';
 import fetch from 'cross-fetch';
 import * as dotenv from 'dotenv';
 import { triggerWorkflowEvent } from './triggerware';
+import { db } from '../db/index';
+import { eq } from 'drizzle-orm';
+import { securityThreatsPipeline } from '../db/schema';
 
 dotenv.config();
 
@@ -47,7 +50,27 @@ export async function propagateWebhook(
       : process.env.BASE_URL || 'http://localhost:3000';
   
   const targetUrl = `${baseUrl}${endpointPath}`;
-  const signature = signPayload(payload);
+
+  // Hydrate payload with full database record to support stateless fallback databases
+  let dbRecord: any = null;
+  try {
+    const [record] = await db
+      .select()
+      .from(securityThreatsPipeline)
+      .where(eq(securityThreatsPipeline.id, payload.recordId));
+    if (record) {
+      dbRecord = record;
+    }
+  } catch (err: any) {
+    console.warn(`[Webhook Propagator] Failed to query record state for hydration:`, err.message);
+  }
+
+  const fullPayload = {
+    ...payload,
+    __dbRecord: dbRecord,
+  };
+
+  const signature = signPayload(fullPayload);
 
   let attempt = 0;
   let delay = 500; // ms
@@ -62,7 +85,7 @@ export async function propagateWebhook(
           'Content-Type': 'application/json',
           'x-shieldradius-signature': signature,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(fullPayload),
       });
 
       if (response.ok) {

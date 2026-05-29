@@ -29,6 +29,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  // Hydrate local mock store if database record state is passed in body (for stateless environments)
+  if (req.body && req.body.__dbRecord) {
+    const { hydrateMockStore } = require('../../db/index');
+    hydrateMockStore(req.body.__dbRecord);
+  }
+
   const { recordId } = req.body;
   if (!recordId) {
     return res.status(400).json({ error: 'Missing recordId in payload' });
