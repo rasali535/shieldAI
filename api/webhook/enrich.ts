@@ -65,9 +65,11 @@ async function handleInternalTrigger(req: VercelRequest, res: VercelResponse) {
     const vendor = record.threat_payload.vendorName;
 
     // 3. Define callback URL pointing back to ourselves with query param
-    const baseUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : process.env.BASE_URL || 'http://localhost:3000';
+    const baseUrl = process.env.URL
+      ? process.env.URL
+      : process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}` 
+        : process.env.BASE_URL || 'http://localhost:3000';
     
     // We add recordId in query parameters to map the async response back to the DB row
     const callbackUrl = `${baseUrl}/api/webhook/enrich?source=brightdata&recordId=${recordId}`;
