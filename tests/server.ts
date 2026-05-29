@@ -4,6 +4,7 @@ import Module from 'module';
 
 // 1. Setup in-memory mock database state
 const mockDatabase = new Map<string, any>();
+(global as any).mockDatabase = mockDatabase;
 
 // 2. Intercept require('cross-fetch') to route all database requests to our mock database
 const originalRequire = (Module as any).prototype.require;
@@ -252,14 +253,12 @@ let monitorHandler: any;
 let assessHandler: any;
 let enrichHandler: any;
 let outreachHandler: any;
-let voiceIngestHandler: any;
 
 async function loadHandlers() {
   monitorHandler = (await import('../api/cron/monitor')).default;
   assessHandler = (await import('../api/webhook/assess')).default;
   enrichHandler = (await import('../api/webhook/enrich')).default;
   outreachHandler = (await import('../api/webhook/outreach')).default;
-  voiceIngestHandler = (await import('../api/webhook/voice-ingest')).default;
 }
 
 // Wrap Serverless handlers to Express Middleware format
@@ -322,10 +321,7 @@ app.post('/api/webhook/outreach', async (req, res, next) => {
   next();
 }, wrapHandler((req: any, res: any) => outreachHandler(req, res)));
 
-app.post('/api/webhook/voice-ingest', async (req, res, next) => {
-  if (!voiceIngestHandler) await loadHandlers();
-  next();
-}, wrapHandler((req: any, res: any) => voiceIngestHandler(req, res)));
+
 
 // Start Server
 const PORT = 3000;
