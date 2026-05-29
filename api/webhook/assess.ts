@@ -4,7 +4,6 @@ import { securityThreatsPipeline } from '../../db/schema';
 import { RiskAnalysisSchema, RiskAnalysis } from '../../types/pipeline';
 import { verifySignature, propagateWebhook } from '../../lib/webhook-helper';
 import { chatCompletion } from '../../lib/aimlapi';
-import { addMemory, searchMemory } from '../../lib/cognee';
 
 interface VercelRequest {
   method?: string;
@@ -66,15 +65,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     let memoryContextText = 'No previous memory found for this vendor.';
-    try {
-      const memories = await searchMemory(payload.vendorName);
-      if (memories && memories.length > 0) {
-        memoryContextText = memories.map((m: any) => `- ${m.content} (Relevance: ${m.relevance})`).join('\n');
-        console.log(`[Agent 2] Retrieved Cognee memory for ${payload.vendorName}:`, memoryContextText);
-      }
-    } catch (memError: any) {
-      console.warn('[Agent 2] Failed to fetch memory from Cognee:', memError.message);
-    }
 
     if (process.env.AIML_API_KEY && process.env.AIML_API_KEY !== 'your_aiml_api_key') {
       try {
@@ -92,7 +82,7 @@ Breach Date: ${payload.breachDate}
 Breach Impact: ${payload.impactDescription}
 Exposed Data: ${breachedData.join(', ')}
 
-Historical Memory Context (from Cognee):
+Historical Memory Context:
 ${memoryContextText}
 
 Please respond with a JSON object matching this schema:
@@ -126,12 +116,6 @@ Please respond with a JSON object matching this schema:
       throw new Error(`Risk analysis validation failed: ${validationResult.error.message}`);
     }
 
-    try {
-      const memoryString = `Incident Memory: Vendor ${payload.vendorName} security incident on ${payload.breachDate} was assessed with a Risk Score of ${score} (${severity}). Justification: ${justification}. Compliance Impacts: ${complianceImpacts.join(', ')}.`;
-      await addMemory(memoryString);
-    } catch (memStoreError: any) {
-      console.warn('[Agent 2] Failed to save assessment to Cognee memory:', memStoreError.message);
-    }
 
     await db
       .update(securityThreatsPipeline)

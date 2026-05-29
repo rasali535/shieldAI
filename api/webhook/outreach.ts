@@ -4,7 +4,6 @@ import { securityThreatsPipeline } from '../../db/schema';
 import { OutreachDraftsPayloadSchema, OutreachDraftsPayload } from '../../types/pipeline';
 import { verifySignature } from '../../lib/webhook-helper';
 import { chatCompletion } from '../../lib/aimlapi';
-import { addMemory } from '../../lib/cognee';
 
 interface VercelRequest {
   method?: string;
@@ -130,14 +129,6 @@ Please respond with a JSON object matching this schema:
       .set({ status: 'OUTREACH_GENERATED', outreachDrafts: validationResult.data, updatedAt: new Date() })
       .where(eq(securityThreatsPipeline.id, recordId));
 
-    try {
-      for (const draft of validationResult.data) {
-        const memoryString = `Outreach Memory: Generated notification for contact ${draft.contactName} (${draft.contactEmail}) at ${draft.companyName} regarding the incident with ${threat.vendorName}. Subject: "${draft.emailSubject}".`;
-        await addMemory(memoryString);
-      }
-    } catch (memStoreError: any) {
-      console.warn('[Agent 4] Failed to save outreach details to Cognee memory:', memStoreError.message);
-    }
 
     console.log(`[Agent 4] Outreach successfully compiled for ${validationResult.data.length} targets. Pipeline complete!`);
 

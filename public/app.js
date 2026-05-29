@@ -1,13 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
   // UI Elements
   const btnTrigger = document.getElementById('btn-trigger');
-  const btnTriggerVoice = document.getElementById('btn-trigger-voice');
   const btnClearConsole = document.getElementById('btn-clear-console');
   const btnSimulateCallback = document.getElementById('btn-simulate-callback');
   const consoleLogs = document.getElementById('console-logs');
   const vendorSelect = document.getElementById('vendor-select');
   const breachSelect = document.getElementById('breach-select');
-  const voiceSelect = document.getElementById('voice-select');
   
   // Pipeline Nodes
   const nodes = {
@@ -300,39 +298,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Action: Trigger Voice Alert Ingestion
-  btnTriggerVoice.addEventListener('click', async () => {
-    const audioUrl = voiceSelect.value;
-    
-    log(`Initiating Speechmatics Voice Ingestion for: "${audioUrl}"...`, 'info');
-    
-    resetVisualizer();
-    setNodeState('threat', 'active');
-    btnTriggerVoice.disabled = true;
-
-    try {
-      const res = await fetch('/api/webhook/voice-ingest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioUrl })
-      });
-      
-      const data = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(data.message || 'Voice Ingest trigger failed');
-      }
-
-      currentRecordId = data.recordId;
-      log(`Speechmatics transcription completed! Transcript snippet: "${data.transcript.substring(0, 80)}..."`, 'success');
-      log(`State machine pipeline initiated from Voice Ingest. DB record: ${currentRecordId}`, 'success');
-      startPolling(currentRecordId);
-
-    } catch (err) {
-      log(`Voice Ingest error: ${err.message}`, 'danger');
-      setNodeState('threat', 'failed');
-    } finally {
-      btnTriggerVoice.disabled = false;
-    }
-  });
 });

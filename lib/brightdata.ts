@@ -22,75 +22,86 @@ export interface SerpResult {
  * 1. SERP API: For broad web searches monitoring news channels and compliance alerts.
  */
 export async function searchSerpApi(query: string): Promise<SerpResult[]> {
+  const mockResults = [
+    {
+      title: `Security alert for vendor: ${query}`,
+      link: 'https://security-advisory.example.com/advisory-102',
+      snippet: 'A critical vulnerability was disclosed that allows unauthorized data access due to misconfigured access controls.',
+      source: 'Security Wire News',
+    },
+  ];
+
   if (!BRIGHTDATA_API_KEY) {
     console.warn('BRIGHTDATA_API_KEY not configured. Returning mock search results.');
-    return [
-      {
-        title: `Security alert for vendor: ${query}`,
-        link: 'https://security-advisory.example.com/advisory-102',
-        snippet: 'A critical vulnerability was disclosed that allows unauthorized data access due to misconfigured access controls.',
-        source: 'Security Wire News',
+    return mockResults;
+  }
+
+  try {
+    const endpoint = `https://api.brightdata.com/request`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${BRIGHTDATA_API_KEY}`,
+        'Content-Type': 'application/json',
       },
-    ];
+      body: JSON.stringify({
+        zone: BRIGHTDATA_ZONE,
+        url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+        format: 'json',
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Bright Data SERP API call failed: ${response.statusText} (${response.status})`);
+    }
+
+    const data = await response.json();
+    const organic = data.organic_results || [];
+    return organic.map((item: any) => ({
+      title: item.title || '',
+      link: item.link || '',
+      snippet: item.snippet || '',
+      source: item.source || '',
+    }));
+  } catch (error: any) {
+    console.warn(`Bright Data SERP API call failed (${error.message}). Falling back to mock search results.`);
+    return mockResults;
   }
-
-  const endpoint = `https://api.brightdata.com/request`;
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${BRIGHTDATA_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      zone: BRIGHTDATA_ZONE,
-      url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
-      format: 'json',
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Bright Data SERP API call failed: ${response.statusText} (${response.status})`);
-  }
-
-  const data = await response.json();
-  // Standardize Bright Data SERP result payload
-  const organic = data.organic_results || [];
-  return organic.map((item: any) => ({
-    title: item.title || '',
-    link: item.link || '',
-    snippet: item.snippet || '',
-    source: item.source || '',
-  }));
 }
 
 /**
  * 2. Web Unlocker: Fetch raw HTML from highly protected compliance/vendor security pages
  */
 export async function fetchWebUnlocker(targetUrl: string): Promise<string> {
+  const mockHtml = `<html><body><h1>Security Advisory for Example Vendor</h1><p>Vulnerability CVE-2026-9999 has compromised user data.</p></body></html>`;
+
   if (!BRIGHTDATA_API_KEY) {
     console.warn('BRIGHTDATA_API_KEY not configured. Returning mock HTML content.');
-    return `<html><body><h1>Security Advisory for Example Vendor</h1><p>Vulnerability CVE-2026-9999 has compromised user data.</p></body></html>`;
+    return mockHtml;
   }
 
-  // Web Unlocker uses Bright Data HTTP proxy network (brd.superproxy.io:22225)
-  // Or can be accessed via their HTTP trigger endpoint
-  const endpoint = 'https://api.brightdata.com/web_unlocker/request';
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${BRIGHTDATA_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: targetUrl,
-    }),
-  });
+  try {
+    const endpoint = 'https://api.brightdata.com/web_unlocker/request';
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${BRIGHTDATA_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: targetUrl,
+      }),
+    });
 
-  if (!response.ok) {
-    throw new Error(`Bright Data Web Unlocker failed to fetch URL ${targetUrl}: ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`Bright Data Web Unlocker failed to fetch URL ${targetUrl}: ${response.statusText} (${response.status})`);
+    }
+
+    return await response.text();
+  } catch (error: any) {
+    console.warn(`Bright Data Web Unlocker failed (${error.message}). Returning mock HTML content.`);
+    return mockHtml;
   }
-
-  return await response.text();
 }
 
 /**
@@ -100,32 +111,37 @@ export async function triggerWebScraperJob(
   targetUrl: string,
   callbackUrl: string
 ): Promise<{ jobId: string }> {
+  const mockJobId = `bd_job_${Math.random().toString(36).substring(7)}`;
+
   if (!BRIGHTDATA_API_KEY) {
     console.warn('BRIGHTDATA_API_KEY not configured. Returning mock jobId.');
-    return { jobId: `bd_job_${Math.random().toString(36).substring(7)}` };
+    return { jobId: mockJobId };
   }
 
-  // Calls the Bright Data Web Scraper API endpoint to trigger a job
-  const endpoint = `https://api.brightdata.com/dca/trigger`;
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${BRIGHTDATA_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: targetUrl,
-      // The callback endpoint on our serverless API to handle results asynchronously
-      callback: callbackUrl,
-    }),
-  });
+  try {
+    const endpoint = `https://api.brightdata.com/dca/trigger`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${BRIGHTDATA_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: targetUrl,
+        callback: callbackUrl,
+      }),
+    });
 
-  if (!response.ok) {
-    throw new Error(`Failed to trigger Bright Data Web Scraper Job: ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`Failed to trigger Bright Data Web Scraper Job: ${response.statusText} (${response.status})`);
+    }
+
+    const data = await response.json();
+    return { jobId: data.id || data.job_id };
+  } catch (error: any) {
+    console.warn(`Bright Data Web Scraper failed to trigger (${error.message}). Returning mock jobId.`);
+    return { jobId: mockJobId };
   }
-
-  const data = await response.json();
-  return { jobId: data.id || data.job_id };
 }
 
 /**
