@@ -195,8 +195,6 @@ global.fetch = async (url: any, options: any = {}): Promise<any> => {
       await enrichHandler(mockReq as any, mockRes);
     } else if (route === '/api/webhook/outreach') {
       await outreachHandler(mockReq as any, mockRes);
-    } else if (route === '/api/webhook/voice-ingest') {
-      await voiceIngestHandler(mockReq as any, mockRes);
     }
 
     return {
