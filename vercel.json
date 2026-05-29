@@ -5,16 +5,12 @@
     {
       "source": "/api/:path*",
       "destination": "/api/:path*"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/public/$1"
     }
   ],
   "crons": [
     {
       "path": "/api/cron/monitor",
-      "schedule": "0 */4 * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }

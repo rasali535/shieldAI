@@ -4,7 +4,7 @@
   "description": "ShieldRadius AI - Serverless Agent State-Machine on Vercel",
   "main": "api/cron/monitor.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs = require('fs'); fs.cpSync('public', 'build', { recursive: true });\"",
     "test": "ts-node tests/integration.test.ts",
     "start": "ts-node tests/server.ts"
   },

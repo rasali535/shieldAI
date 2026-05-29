@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShieldRadius AI - State-Machine Dashboard</title>
+  <!-- Google Fonts for Modern Security Tech Aesthetic -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Glowing Header -->
+    <header class="app-header">
+      <div class="logo-area">
+        <div class="logo-shield"></div>
+        <div class="logo-text">
+          <h1>ShieldRadius AI</h1>
+          <p>Serverless Event-Driven State Coordinator</p>
+        </div>
+      </div>
+      <div class="system-status">
+        <span class="status-pulse"></span>
+        <span class="status-label">Pipeline Active</span>
+      </div>
+    </header>
+
+    <!-- Main Grid Layout -->
+    <main class="dashboard-grid">
+      <!-- Control Panel -->
+      <section class="panel control-panel glass">
+        <h2>System Orchestration</h2>
+        <p class="panel-desc">Trigger autonomous scans or simulate vendor security advisories to run the state-machine workflow.</p>
+        
+        <div class="control-actions">
+          <div class="input-group">
+            <label for="vendor-select">Choose Supplier/Vendor</label>
+            <select id="vendor-select">
+              <option value="AcmeCloud Corp">AcmeCloud Corp (SaaS Cloud)</option>
+              <option value="AuthVault Inc">AuthVault Inc (Identity Provider)</option>
+              <option value="DataFlow Systems">DataFlow Systems (Analytics Pipeline)</option>
+              <option value="CoreHost Ltd">CoreHost Ltd (Bare Metal VPS)</option>
+              <option value="CUSTOM">Custom Vendor / Query...</option>
+            </select>
+          </div>
+          
+          <div class="input-group hidden" id="custom-vendor-group">
+            <label for="custom-vendor-input">Custom Vendor Name</label>
+            <input type="text" id="custom-vendor-input" placeholder="e.g. Auth0" value="Auth0">
+          </div>
+
+          <div class="input-group">
+            <label for="custom-query-input">Threat Search Query (Bright Data SERP)</label>
+            <input type="text" id="custom-query-input" placeholder="e.g. site:security-advisory.example.com vendor data breach" value="site:security-advisory.example.com vendor data breach">
+          </div>
+
+          <div class="input-group">
+            <label for="scrape-url-input">Target URL to Scrape Client Accounts (Bright Data Browser)</label>
+            <input type="url" id="scrape-url-input" placeholder="e.g. https://news.ycombinator.com" value="https://news.ycombinator.com">
+          </div>
+
+          <div class="input-group">
+            <label for="breach-select">Breach Severity</label>
+            <select id="breach-select">
+              <option value="CRITICAL">Critical (API Token Leak / RCE)</option>
+              <option value="HIGH">High (Customer Record Exposure)</option>
+              <option value="MEDIUM">Medium (Configuration Disclosure)</option>
+            </select>
+          </div>
+          
+          <button id="btn-trigger" class="btn btn-primary">
+            <span class="btn-icon">⚡</span>
+            <span>Trigger Threat Incident Pipeline</span>
+          </button>
+          
+
+        </div>
+
+        <hr class="separator">
+
+        <!-- Bright Data Credentials status -->
+        <div class="brightdata-status">
+          <h3>Bright Data Tools Binding</h3>
+          <div class="tool-list">
+            <div class="tool-item">
+              <span class="tool-name">SERP API Search</span>
+              <span class="badge badge-success">MCP Bound</span>
+            </div>
+            <div class="tool-item">
+              <span class="tool-name">Web Unlocker Proxy</span>
+              <span class="badge badge-success">HTTP Routed</span>
+            </div>
+            <div class="tool-item">
+              <span class="tool-name">Web Scraper (Async API)</span>
+              <span class="badge badge-success">Callback Ready</span>
+            </div>
+            <div class="tool-item">
+              <span class="tool-name">Scraping Browser Session</span>
+              <span class="badge badge-success">WS Ready</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Agent State Map -->
+      <section class="panel map-panel glass">
+        <h2>Agent State Coordinator Map</h2>
+        <p class="panel-desc">Stateless transitions routed via Supabase database updates and secure webhook propagations.</p>
+        
+        <div class="pipeline-visualizer">
+          <!-- Step 1 -->
+          <div class="step-node" id="node-threat-intel">
+            <div class="node-icon">🕵️‍♂️</div>
+            <div class="node-label">Threat Intel</div>
+            <div class="node-sub">Agent 1 (Cron)</div>
+            <span class="node-status">Idle</span>
+          </div>
+
+          <div class="step-connector" id="connector-1"></div>
+
+          <!-- Step 2 -->
+          <div class="step-node" id="node-risk-assess">
+            <div class="node-icon">⚖️</div>
+            <div class="node-label">Risk Assessment</div>
+            <div class="node-sub">Agent 2 (Webhook)</div>
+            <span class="node-status">Idle</span>
+          </div>
+
+          <div class="step-connector" id="connector-2"></div>
+
+          <!-- Step 3 -->
+          <div class="step-node" id="node-gtm-enrich">
+            <div class="node-icon">🔍</div>
+            <div class="node-label">GTM Enrichment</div>
+            <div class="node-sub">Agent 3 (Async Scrape)</div>
+            <span class="node-status">Idle</span>
+          </div>
+
+          <div class="step-connector" id="connector-3"></div>
+
+          <!-- Step 4 -->
+          <div class="step-node" id="node-outreach">
+            <div class="node-icon">✉️</div>
+            <div class="node-label">Outreach Engine</div>
+            <div class="node-sub">Agent 4 (Webhook)</div>
+            <span class="node-status">Idle</span>
+          </div>
+        </div>
+
+        <!-- Simulation Progress Console -->
+        <div class="simulation-console">
+          <div class="console-header">
+            <span>Orchestration Console Logs</span>
+            <button id="btn-clear-console">Clear</button>
+          </div>
+          <div class="console-body" id="console-logs">
+            <div class="log-line text-muted">[System Ready] Select a vendor threat scenario and trigger the simulation.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Details View Panel -->
+      <section class="panel details-panel glass">
+        <h2>Detailed State Inspection</h2>
+        <div class="tabs-header">
+          <button class="tab-btn active" data-tab="tab-threat">Threat Data</button>
+          <button class="tab-btn" data-tab="tab-risk">Risk Assessment</button>
+          <button class="tab-btn" data-tab="tab-enrichment">Enriched Targets</button>
+          <button class="tab-btn" data-tab="tab-outreach">GTM Outreach</button>
+        </div>
+
+        <div class="tab-content" id="tab-threat">
+          <h3>Ingested Threat Payload</h3>
+          <p class="tab-desc">Validated by Zod schema inside `/api/cron/monitor` (Agent 1).</p>
+          <pre class="json-viewer" id="threat-json">No threat detected yet. Run the simulation to view the raw threat payload.</pre>
+        </div>
+
+        <div class="tab-content hidden" id="tab-risk">
+          <h3>Risk Assessment (ThreatRiskObject)</h3>
+          <p class="tab-desc">Derived compliance maps computed by Risk Agent (Agent 2).</p>
+          <div class="risk-summary">
+            <div class="metric-card">
+              <span class="metric-label">Risk Score</span>
+              <span class="metric-value text-glow" id="risk-score-value">-</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Severity</span>
+              <span class="badge" id="risk-severity-badge">None</span>
+            </div>
+          </div>
+          <pre class="json-viewer" id="risk-json">Awaiting risk assessor execution...</pre>
+        </div>
+
+        <div class="tab-content hidden" id="tab-enrichment">
+          <h3>Enriched Client Accounts</h3>
+          <p class="tab-desc">Bright Data Scraper callback parsing results (Agent 3).</p>
+          <div class="scrape-job-info hidden" id="scrape-job-panel">
+            <span class="job-id-label">Bright Data Scraping Job ID:</span>
+            <code id="brightdata-job-id-display">bd_job_xxxx</code>
+            <button id="btn-simulate-callback" class="btn btn-secondary">Force Scraper Webhook Callback</button>
+          </div>
+          <pre class="json-viewer" id="enrichment-json">Awaiting target enrichment execution...</pre>
+        </div>
+
+        <div class="tab-content hidden" id="tab-outreach">
+          <h3>Outreach Drafts</h3>
+          <p class="tab-desc">Personalized security notification drafts compiled by Outreach Agent (Agent 4).</p>
+          <div class="outreach-drafts-list" id="outreach-drafts-container">
+            <p class="text-muted">Awaiting outreach engine compilation...</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
