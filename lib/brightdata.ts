@@ -34,7 +34,7 @@ export async function searchSerpApi(query: string): Promise<SerpResult[]> {
     ];
   }
 
-  const endpoint = `https://api.brightdata.com/serp/search`;
+  const endpoint = `https://api.brightdata.com/request`;
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -42,14 +42,14 @@ export async function searchSerpApi(query: string): Promise<SerpResult[]> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      q: query,
       zone: BRIGHTDATA_ZONE,
-      num: 5,
+      url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+      format: 'json',
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`Bright Data SERP API call failed: ${response.statusText}`);
+    throw new Error(`Bright Data SERP API call failed: ${response.statusText} (${response.status})`);
   }
 
   const data = await response.json();
