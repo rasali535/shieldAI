@@ -165,12 +165,11 @@ export function getScrapingBrowserConnectOptions(): { browserWSEndpoint: string 
   };
 }
 
-import puppeteer from 'puppeteer-core';
-
 /**
  * Scrape raw text content from a target URL using Bright Data Scraping Browser.
  */
 export async function scrapeWebpage(url: string): Promise<string> {
+  const puppeteer = require('puppeteer-core');
   const connectOptions = getScrapingBrowserConnectOptions();
   console.log(`[Bright Data Browser] Connecting to Scraping Browser for URL: ${url}`);
   
