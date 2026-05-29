@@ -21,6 +21,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const recordId = req.query.recordId;
+  if (recordId === 'debug') {
+    return res.status(200).json({
+      supabaseUrl: process.env.SUPABASE_URL || 'missing',
+      supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'present' : 'missing',
+      cronSecret: process.env.CRON_SECRET ? 'present' : 'missing',
+      aimlApiKey: process.env.AIML_API_KEY ? 'present' : 'missing',
+      nodeVersion: process.version,
+    });
+  }
+
   if (!recordId || typeof recordId !== 'string') {
     return res.status(400).json({ error: 'Missing recordId query' });
   }
