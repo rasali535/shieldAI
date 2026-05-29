@@ -1,8 +1,32 @@
-import { drizzle } from "drizzle-orm/netlify-db";
+import { createClient } from "@supabase/supabase-js";
 import * as schema from "./schema";
 import crypto from "crypto";
 
-const keysToMap: Record<string, string> = {
+const isValidUrl = (url: string | undefined): boolean => {
+  if (!url) return false;
+  if (url === "your_supabase_url" || url.includes("mock-supabase-url")) return false;
+  try {
+    new URL(url);
+    return true;
+  } catch (_) {
+    return false;
+  }
+};
+
+const isDbConfigured = isValidUrl(process.env.SUPABASE_URL) &&
+                       !!process.env.SUPABASE_SERVICE_ROLE_KEY &&
+                       process.env.SUPABASE_SERVICE_ROLE_KEY !== "your_service_role_key" &&
+                       process.env.SUPABASE_SERVICE_ROLE_KEY !== "mock-service-role-key";
+
+const supabaseClient = isDbConfigured
+  ? createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+      auth: { persistSession: false }
+    })
+  : null;
+
+const camelToSnake: Record<string, string> = {
+  id: "id",
+  status: "status",
   threatSource: "threat_source",
   threatPayload: "threat_payload",
   riskScore: "risk_score",
@@ -15,17 +39,28 @@ const keysToMap: Record<string, string> = {
   updatedAt: "updated_at",
 };
 
-function mapRecordKeys(record: any) {
-  if (!record) return record;
-  const newRecord = { ...record };
-  for (const [camel, snake] of Object.entries(keysToMap)) {
-    if (camel in newRecord && newRecord[camel] !== undefined) {
-      newRecord[snake] = newRecord[camel];
-    } else if (snake in newRecord && newRecord[snake] !== undefined) {
-      newRecord[camel] = newRecord[snake];
-    }
+const snakeToCamel: Record<string, string> = Object.fromEntries(
+  Object.entries(camelToSnake).map(([k, v]) => [v, k])
+);
+
+function toSnakeCase(data: any): any {
+  if (!data) return data;
+  const result: any = {};
+  for (const [k, v] of Object.entries(data)) {
+    const snakeKey = camelToSnake[k] || k;
+    result[snakeKey] = v;
   }
-  return newRecord;
+  return result;
+}
+
+function toCamelCase(data: any): any {
+  if (!data) return data;
+  const result: any = {};
+  for (const [k, v] of Object.entries(data)) {
+    const camelKey = snakeToCamel[k] || k;
+    result[camelKey] = v;
+  }
+  return result;
 }
 
 const localMockStore = new Map<string, any>();
@@ -50,16 +85,31 @@ function getParamFromSql(sqlExpr: any): string | null {
   return null;
 }
 
-const mockDb = {
+export const db = {
   select: () => {
     return {
       from: (table: any) => {
         return {
-          where: (condition: any) => {
+          where: async (condition: any) => {
             const recordId = getParamFromSql(condition);
-            const store = getStore();
-            const record = recordId ? store.get(recordId) : null;
-            return record ? [mapRecordKeys(record)] : [];
+            if (!recordId) return [];
+
+            if (supabaseClient) {
+              const { data, error } = await supabaseClient
+                .from("security_threats_pipeline")
+                .select("*")
+                .eq("id", recordId);
+
+              if (error) {
+                console.error("[DB] Supabase select error:", error);
+                throw error;
+              }
+              return data ? data.map(toCamelCase) : [];
+            } else {
+              const store = getStore();
+              const record = store.get(recordId);
+              return record ? [toCamelCase(record)] : [];
+            }
           },
         };
       },
@@ -69,9 +119,9 @@ const mockDb = {
     return {
       values: (data: any) => {
         return {
-          returning: (fields: any) => {
+          returning: async (fields: any) => {
             const id = data.id || crypto.randomUUID();
-            const record = mapRecordKeys({
+            const recordData = {
               id,
               status: data.status || "RAW_DETECTED",
               threatSource: data.threatSource || "",
@@ -84,10 +134,26 @@ const mockDb = {
               errorMessage: data.errorMessage || null,
               createdAt: new Date(),
               updatedAt: new Date(),
-            });
-            const store = getStore();
-            store.set(id, record);
-            return [record];
+            };
+
+            if (supabaseClient) {
+              const { data: record, error } = await supabaseClient
+                .from("security_threats_pipeline")
+                .insert(toSnakeCase(recordData))
+                .select("*")
+                .single();
+
+              if (error) {
+                console.error("[DB] Supabase insert error:", error);
+                throw error;
+              }
+              return [toCamelCase(record)];
+            } else {
+              const store = getStore();
+              const mappedRecord = toSnakeCase(recordData);
+              store.set(id, mappedRecord);
+              return [toCamelCase(mappedRecord)];
+            }
           },
         };
       },
@@ -97,24 +163,39 @@ const mockDb = {
     return {
       set: (data: any) => {
         return {
-          where: (condition: any) => {
+          where: async (condition: any) => {
             const recordId = getParamFromSql(condition);
-            const store = getStore();
-            if (recordId && store.has(recordId)) {
-              const current = store.get(recordId);
-              const updated = mapRecordKeys({
-                ...current,
-                ...data,
-                updatedAt: new Date(),
-              });
-              store.set(recordId, updated);
+            if (!recordId) return;
+
+            const updateData = toSnakeCase({
+              ...data,
+              updatedAt: new Date(),
+            });
+
+            if (supabaseClient) {
+              const { error } = await supabaseClient
+                .from("security_threats_pipeline")
+                .update(updateData)
+                .eq("id", recordId);
+
+              if (error) {
+                console.error("[DB] Supabase update error:", error);
+                throw error;
+              }
+            } else {
+              const store = getStore();
+              if (store.has(recordId)) {
+                const current = store.get(recordId);
+                const updated = {
+                  ...current,
+                  ...updateData,
+                };
+                store.set(recordId, updated);
+              }
             }
-            return Promise.resolve();
           },
         };
       },
     };
   },
-};
-
-export const db = process.env.NETLIFY_DB_URL ? drizzle({ schema }) : (mockDb as any);
+} as any;

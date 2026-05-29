@@ -9,7 +9,6 @@
     "start": "ts-node tests/server.ts"
   },
   "dependencies": {
-    "@netlify/database": "^1.0.0",
     "@supabase/supabase-js": "^2.39.8",
     "cross-fetch": "^4.0.0",
     "dotenv": "^16.4.5",
