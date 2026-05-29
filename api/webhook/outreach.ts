@@ -1,4 +1,6 @@
-import { supabase } from '../../lib/db/client';
+import { eq } from 'drizzle-orm';
+import { db } from '../../db/index';
+import { securityThreatsPipeline } from '../../db/schema';
 import { OutreachDraftsPayloadSchema, OutreachDraftsPayload } from '../../types/pipeline';
 import { verifySignature } from '../../lib/webhook-helper';
 import { chatCompletion } from '../../lib/aimlapi';
@@ -22,7 +24,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // 1. Verify incoming webhook signature
   const signature = req.headers['x-shieldradius-signature'] as string;
   if (!signature || !verifySignature(req.body, signature)) {
     console.error('[Agent 4] Invalid signature header.');
@@ -37,25 +38,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log(`[Agent 4] Synthesizing Outreach briefs for record: ${recordId}`);
 
   try {
-    // 2. Fetch record from Supabase
-    const { data: record, error: fetchError } = await supabase
-      .from('security_threats_pipeline')
-      .select('*')
-      .eq('id', recordId)
-      .single();
+    const [record] = await db
+      .select()
+      .from(securityThreatsPipeline)
+      .where(eq(securityThreatsPipeline.id, recordId));
 
-    if (fetchError || !record) {
-      throw new Error(`Record not found: ${fetchError?.message}`);
+    if (!record) {
+      throw new Error(`Record not found for id: ${recordId}`);
     }
 
-    const threat = record.threat_payload;
-    const targets = record.enriched_targets || [];
+    const threat = record.threatPayload as any;
+    const targets = (record.enrichedTargets as any[]) || [];
 
-    // 3. Generate hyper-personalized outreach campaigns
     const outreachDrafts: OutreachDraftsPayload = await Promise.all(
       targets.map(async (target: any) => {
         const primaryContact = target.contacts[0] || { name: 'IT Security Lead', role: 'Security Ops', email: 'security@company.com' };
-        
+
         let subject = `Urgent Compliance & Risk Assessment regarding ${threat.vendorName}`;
         let body = `Hi ${primaryContact.name},\n\n` +
           `I am reaching out from ShieldRadius AI because we detected a major security incident at ${threat.vendorName} on ${threat.breachDate}. ` +
@@ -95,19 +93,16 @@ Tech Stack Signals: ${target.techStackSignals.join(', ')}
 Please respond with a JSON object matching this schema:
 {
   "subject": "Clear, professional, urgent subject line",
-  "body": "Highly professional email body tailored to their role and tech stack. Emphasize how ShieldRadius AI can help, reference the exact exposed assets, and include a helpful checklist. Signature should be 'ShieldRadius Autonomous Response Team'."
+  "body": "Highly professional email body tailored to their role and tech stack."
 }`
               }
             ];
-            const aiResponse = await chatCompletion(messages, {
-              response_format: { type: 'json_object' }
-            });
+            const aiResponse = await chatCompletion(messages, { response_format: { type: 'json_object' } });
             if (aiResponse) {
               const parsed = JSON.parse(aiResponse);
               if (parsed.subject && parsed.body) {
                 subject = parsed.subject;
                 body = parsed.body;
-                console.log(`[Agent 4] Successfully generated AI-personalized email for ${target.companyName}`);
               }
             }
           } catch (e: any) {
@@ -125,26 +120,16 @@ Please respond with a JSON object matching this schema:
       })
     );
 
-    // 4. Validate output schema using Zod
     const validationResult = OutreachDraftsPayloadSchema.safeParse(outreachDrafts);
     if (!validationResult.success) {
       throw new Error(`Outreach payload validation failed: ${validationResult.error.message}`);
     }
 
-    // 5. Update state in database to 'OUTREACH_GENERATED'
-    const { error: dbError } = await supabase
-      .from('security_threats_pipeline')
-      .update({
-        status: 'OUTREACH_GENERATED',
-        outreach_drafts: validationResult.data,
-      })
-      .eq('id', recordId);
+    await db
+      .update(securityThreatsPipeline)
+      .set({ status: 'OUTREACH_GENERATED', outreachDrafts: validationResult.data, updatedAt: new Date() })
+      .where(eq(securityThreatsPipeline.id, recordId));
 
-    if (dbError) {
-      throw new Error(`Failed to update outreach drafts: ${dbError.message}`);
-    }
-
-    // Persist outreach briefs to Cognee memory so the agent has a trace of what was communicated
     try {
       for (const draft of validationResult.data) {
         const memoryString = `Outreach Memory: Generated notification for contact ${draft.contactName} (${draft.contactEmail}) at ${draft.companyName} regarding the incident with ${threat.vendorName}. Subject: "${draft.emailSubject}".`;
@@ -163,13 +148,10 @@ Please respond with a JSON object matching this schema:
     });
   } catch (error: any) {
     console.error('[Agent 4] Outreach compilation failed:', error.message || error);
-    await supabase
-      .from('security_threats_pipeline')
-      .update({
-        status: 'FAILED',
-        error_message: `Agent 4 error: ${error.message || error}`,
-      })
-      .eq('id', recordId);
+    await db
+      .update(securityThreatsPipeline)
+      .set({ status: 'FAILED', errorMessage: `Agent 4 error: ${error.message || error}`, updatedAt: new Date() })
+      .where(eq(securityThreatsPipeline.id, recordId));
 
     return res.status(500).json({ error: 'Internal Server Error', message: error.message });
   }

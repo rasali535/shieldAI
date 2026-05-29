@@ -1,4 +1,6 @@
-import { supabase } from '../../lib/db/client';
+import { eq } from 'drizzle-orm';
+import { db } from '../../db/index';
+import { securityThreatsPipeline } from '../../db/schema';
 import { transcribeAudioUrl } from '../../lib/speechmatics';
 import { chatCompletion } from '../../lib/aimlapi';
 import { ThreatPayloadSchema, ThreatPayload } from '../../types/pipeline';
@@ -17,10 +19,6 @@ interface VercelResponse {
   send: (body: string) => void;
 }
 
-/**
- * Speechmatics Voice Ingest Agent Endpoint
- * Receives an audio URL, transcribes it, extracts threat intelligence, and logs it to Supabase.
- */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -34,14 +32,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log(`[Voice Ingest Agent] Initiating speech-to-text threat processing for: ${audioUrl}`);
 
   try {
-    // 1. Transcribe the audio using Speechmatics
     const transcriptionResult = await transcribeAudioUrl(audioUrl);
     const transcriptText = transcriptionResult.text;
 
     console.log(`[Voice Ingest Agent] Transcription complete. Length: ${transcriptText.length} characters.`);
-    console.log(`[Voice Ingest Agent] Transcript: "${transcriptText}"`);
 
-    // 2. Perform AI-powered entity extraction & reasoning using AI/ML API
     let threatPayload: ThreatPayload = {
       vendorName: 'AcmeCloud Corp',
       breachDate: new Date().toISOString().split('T')[0],
@@ -68,14 +63,12 @@ Please respond with a JSON object matching this schema:
   "vendorName": "name of vendor/company breached",
   "breachDate": "YYYY-MM-DD format (use today's date if not specified)",
   "impactDescription": "detailed impact description (at least 15 characters long summarizing the incident)",
-  "advisoryUrl": "URL to the official advisory (extract if mentioned, otherwise construct a reasonable placeholder link on the vendor domain)",
+  "advisoryUrl": "URL to the official advisory",
   "breachedDataTypes": ["array", "of", "breached", "data", "types"]
 }`
           }
         ];
-        const aiResponse = await chatCompletion(messages, {
-          response_format: { type: 'json_object' }
-        });
+        const aiResponse = await chatCompletion(messages, { response_format: { type: 'json_object' } });
         if (aiResponse) {
           const parsed = JSON.parse(aiResponse);
           if (parsed.vendorName && parsed.impactDescription && Array.isArray(parsed.breachedDataTypes)) {
@@ -86,7 +79,6 @@ Please respond with a JSON object matching this schema:
               advisoryUrl: parsed.advisoryUrl || 'https://security-advisory.example.com/voice-alert',
               breachedDataTypes: parsed.breachedDataTypes
             };
-            console.log('[Voice Ingest Agent] Successfully parsed threat payload from voice using AI/ML API:', threatPayload);
           }
         }
       } catch (e: any) {
@@ -94,49 +86,38 @@ Please respond with a JSON object matching this schema:
       }
     }
 
-    // 3. Validate threat payload structure with Zod
     const validationResult = ThreatPayloadSchema.safeParse(threatPayload);
     if (!validationResult.success) {
       console.error('[Voice Ingest Agent] Threat validation failed:', validationResult.error.format());
-      return res.status(400).json({
-        error: 'Validation failed',
-        details: validationResult.error.format(),
-      });
+      return res.status(400).json({ error: 'Validation failed', details: validationResult.error.format() });
     }
 
-    // 4. Insert RAW_DETECTED record into Supabase
-    const { data: record, error: dbError } = await supabase
-      .from('security_threats_pipeline')
-      .insert({
+    const [record] = await db
+      .insert(securityThreatsPipeline)
+      .values({
         status: 'RAW_DETECTED',
-        threat_source: 'Speechmatics Voice Alert Ingest',
-        threat_payload: validationResult.data,
+        threatSource: 'Speechmatics Voice Alert Ingest',
+        threatPayload: validationResult.data,
       })
-      .select('id, status')
-      .single();
+      .returning({ id: securityThreatsPipeline.id, status: securityThreatsPipeline.status });
 
-    if (dbError) {
-      console.error('[Voice Ingest Agent] Database insert failed:', dbError);
-      throw new Error(`Database insert failed: ${dbError.message}`);
+    if (!record) {
+      throw new Error('Database insert returned no record.');
     }
 
     console.log(`[Voice Ingest Agent] Voice alert threat logged. Record ID: ${record.id}, Status: ${record.status}`);
 
-    // 5. Propagate state to Agent 2 (Risk Assessment Agent)
     const propagationSuccess = await propagateWebhook('/api/webhook/assess', {
       recordId: record.id,
       status: 'RAW_DETECTED',
     });
 
     if (!propagationSuccess) {
-      await supabase
-        .from('security_threats_pipeline')
-        .update({
-          status: 'FAILED',
-          error_message: 'Failed to propagate threat to Risk Assessment Agent webhook.',
-        })
-        .eq('id', record.id);
-      
+      await db
+        .update(securityThreatsPipeline)
+        .set({ status: 'FAILED', errorMessage: 'Failed to propagate threat to Risk Assessment Agent webhook.', updatedAt: new Date() })
+        .where(eq(securityThreatsPipeline.id, record.id));
+
       return res.status(500).json({ error: 'Propagation failed' });
     }
 

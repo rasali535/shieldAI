@@ -1,4 +1,6 @@
-import { supabase } from '../lib/db/client';
+import { eq } from 'drizzle-orm';
+import { db } from '../db/index';
+import { securityThreatsPipeline } from '../db/schema';
 
 interface VercelRequest {
   method?: string;
@@ -24,13 +26,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { data: record, error: fetchError } = await supabase
-      .from('security_threats_pipeline')
-      .select('*')
-      .eq('id', recordId)
-      .single();
+    const [record] = await db
+      .select()
+      .from(securityThreatsPipeline)
+      .where(eq(securityThreatsPipeline.id, recordId));
 
-    if (fetchError || !record) {
+    if (!record) {
       return res.status(404).json({ error: 'Record not found' });
     }
 

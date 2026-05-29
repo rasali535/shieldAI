@@ -1,4 +1,6 @@
-import { supabase } from '../../lib/db/client';
+import { eq } from 'drizzle-orm';
+import { db } from '../../db/index';
+import { securityThreatsPipeline } from '../../db/schema';
 import { RiskAnalysisSchema, RiskAnalysis } from '../../types/pipeline';
 import { verifySignature, propagateWebhook } from '../../lib/webhook-helper';
 import { chatCompletion } from '../../lib/aimlapi';
@@ -22,7 +24,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // 1. Verify incoming webhook signature
   const signature = req.headers['x-shieldradius-signature'] as string;
   if (!signature || !verifySignature(req.body, signature)) {
     console.error('[Agent 2] Invalid signature header.');
@@ -37,21 +38,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log(`[Agent 2] Running Risk Assessment for record: ${recordId}`);
 
   try {
-    // 2. Fetch record from Supabase
-    const { data: record, error: fetchError } = await supabase
-      .from('security_threats_pipeline')
-      .select('*')
-      .eq('id', recordId)
-      .single();
+    const [record] = await db
+      .select()
+      .from(securityThreatsPipeline)
+      .where(eq(securityThreatsPipeline.id, recordId));
 
-    if (fetchError || !record) {
-      throw new Error(`Record not found: ${fetchError?.message || 'No record returned'}`);
+    if (!record) {
+      throw new Error(`Record not found for id: ${recordId}`);
     }
 
-    // 3. Compute Risk Analysis
-    const payload = record.threat_payload;
-    const breachedData = payload.breachedDataTypes || [];
-    
+    const payload = record.threatPayload as any;
+    const breachedData: string[] = payload.breachedDataTypes || [];
+
     let score = 50;
     let severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' = 'MEDIUM';
     let complianceImpacts: string[] = ['SOC2'];
@@ -67,12 +65,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       complianceImpacts.push('GDPR');
     }
 
-    // Retrieve historical Cognee memory context for this vendor
     let memoryContextText = 'No previous memory found for this vendor.';
     try {
       const memories = await searchMemory(payload.vendorName);
       if (memories && memories.length > 0) {
-        memoryContextText = memories.map(m => `- ${m.content} (Relevance: ${m.relevance})`).join('\n');
+        memoryContextText = memories.map((m: any) => `- ${m.content} (Relevance: ${m.relevance})`).join('\n');
         console.log(`[Agent 2] Retrieved Cognee memory for ${payload.vendorName}:`, memoryContextText);
       }
     } catch (memError: any) {
@@ -98,20 +95,16 @@ Exposed Data: ${breachedData.join(', ')}
 Historical Memory Context (from Cognee):
 ${memoryContextText}
 
-Please use the memory context above to inform your analysis. If previous assessments exist, maintain compliance assessment consistency unless the new breach indicators represent an escalation of risk.
-
 Please respond with a JSON object matching this schema:
 {
   "severity": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
-  "complianceImpacts": ["GDPR", "SOC2", "HIPAA", "PCI-DSS", "CCPA", etc.],
-  "score": 0 to 100 (integer representing risk score),
-  "justification": "Detailed explanation of the risk score and compliance impacts"
+  "complianceImpacts": ["GDPR", "SOC2", "HIPAA", "PCI-DSS", "CCPA"],
+  "score": 0 to 100 integer,
+  "justification": "Detailed explanation"
 }`
           }
         ];
-        const aiResponse = await chatCompletion(messages, {
-          response_format: { type: 'json_object' }
-        });
+        const aiResponse = await chatCompletion(messages, { response_format: { type: 'json_object' } });
         if (aiResponse) {
           const parsed = JSON.parse(aiResponse);
           if (parsed.severity && typeof parsed.score === 'number' && parsed.justification) {
@@ -119,7 +112,6 @@ Please respond with a JSON object matching this schema:
             score = parsed.score;
             complianceImpacts = parsed.complianceImpacts || ['SOC2'];
             justification = parsed.justification;
-            console.log('[Agent 2] Dynamically assessed risk using AI/ML API:', { severity, score, complianceImpacts });
           }
         }
       } catch (e: any) {
@@ -127,20 +119,13 @@ Please respond with a JSON object matching this schema:
       }
     }
 
-    const riskAnalysis: RiskAnalysis = {
-      severity,
-      complianceImpacts,
-      score,
-      justification,
-    };
+    const riskAnalysis: RiskAnalysis = { severity, complianceImpacts, score, justification };
 
-    // Validate structured object
     const validationResult = RiskAnalysisSchema.safeParse(riskAnalysis);
     if (!validationResult.success) {
       throw new Error(`Risk analysis validation failed: ${validationResult.error.message}`);
     }
 
-    // Persist this assessment result to Cognee memory for persistent future context
     try {
       const memoryString = `Incident Memory: Vendor ${payload.vendorName} security incident on ${payload.breachDate} was assessed with a Risk Score of ${score} (${severity}). Justification: ${justification}. Compliance Impacts: ${complianceImpacts.join(', ')}.`;
       await addMemory(memoryString);
@@ -148,51 +133,35 @@ Please respond with a JSON object matching this schema:
       console.warn('[Agent 2] Failed to save assessment to Cognee memory:', memStoreError.message);
     }
 
-    // 4. Update state in database
-    const { error: updateError } = await supabase
-      .from('security_threats_pipeline')
-      .update({
-        status: 'RISK_QUALIFIED',
-        risk_score: score,
-        risk_analysis: validationResult.data,
-      })
-      .eq('id', recordId);
-
-    if (updateError) {
-      throw new Error(`Failed to update risk evaluation: ${updateError.message}`);
-    }
+    await db
+      .update(securityThreatsPipeline)
+      .set({ status: 'RISK_QUALIFIED', riskScore: score, riskAnalysis: validationResult.data, updatedAt: new Date() })
+      .where(eq(securityThreatsPipeline.id, recordId));
 
     console.log(`[Agent 2] Risk assessment completed. Score: ${score}, Severity: ${severity}`);
 
-    // 5. Propagate state to Agent 3 (GTM Enrichment Agent)
     const propagationSuccess = await propagateWebhook('/api/webhook/enrich', {
       recordId,
       status: 'RISK_QUALIFIED',
     });
 
     if (!propagationSuccess) {
-      await supabase
-        .from('security_threats_pipeline')
-        .update({
-          status: 'FAILED',
-          error_message: 'Failed to propagate threat to GTM Enrichment Agent webhook.',
-        })
-        .eq('id', recordId);
-      
+      await db
+        .update(securityThreatsPipeline)
+        .set({ status: 'FAILED', errorMessage: 'Failed to propagate threat to GTM Enrichment Agent webhook.', updatedAt: new Date() })
+        .where(eq(securityThreatsPipeline.id, recordId));
+
       return res.status(500).json({ error: 'Propagation failed' });
     }
 
     return res.status(200).json({ message: 'Risk assessment complete', recordId });
   } catch (error: any) {
     console.error('[Agent 2] Risk evaluation failed:', error.message || error);
-    await supabase
-      .from('security_threats_pipeline')
-      .update({
-        status: 'FAILED',
-        error_message: `Agent 2 error: ${error.message || error}`,
-      })
-      .eq('id', recordId);
-    
+    await db
+      .update(securityThreatsPipeline)
+      .set({ status: 'FAILED', errorMessage: `Agent 2 error: ${error.message || error}`, updatedAt: new Date() })
+      .where(eq(securityThreatsPipeline.id, recordId));
+
     return res.status(500).json({ error: 'Internal Server Error', message: error.message });
   }
 }

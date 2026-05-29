@@ -1,10 +1,11 @@
-import { supabase } from '../../lib/db/client';
+import { eq } from 'drizzle-orm';
+import { db } from '../../db/index';
+import { securityThreatsPipeline } from '../../db/schema';
 import { searchSerpApi } from '../../lib/brightdata';
 import { ThreatPayloadSchema, ThreatPayload } from '../../types/pipeline';
 import { propagateWebhook } from '../../lib/webhook-helper';
 import { chatCompletion } from '../../lib/aimlapi';
 
-// Interface for standard Vercel Serverless Function signature
 interface VercelRequest {
   method?: string;
   headers: Record<string, string | string[] | undefined>;
@@ -19,10 +20,9 @@ interface VercelResponse {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // 1. Verify Vercel Cron Secret (Standard Security Practice)
   const authHeader = req.headers.authorization;
   const cronSecret = process.env.CRON_SECRET;
-  
+
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     console.error('[Agent 1] Unauthorized cron attempt.');
     return res.status(401).json({ error: 'Unauthorized' });
@@ -31,7 +31,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('[Agent 1] Initiating Threat Intelligence Scan...');
 
   try {
-    // 2. Query Bright Data SERP API for recent breach advisory pages
     const searchQuery = 'site:security-advisory.example.com vendor data breach';
     console.log(`[Agent 1] Executing broad web scan with query: "${searchQuery}"`);
     const searchResults = await searchSerpApi(searchQuery);
@@ -41,12 +40,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ message: 'No threats detected' });
     }
 
-    // 3. Process the first detected threat (or iterate over all)
     const primaryResult = searchResults[0];
-    
-    // Structure threat payload matching schema
+
     let threatPayload: ThreatPayload = {
-      vendorName: 'AcmeCloud Corp', // In production, extract this dynamically from result.title
+      vendorName: 'AcmeCloud Corp',
       breachDate: new Date().toISOString().split('T')[0],
       impactDescription: primaryResult.snippet || 'A major data breach exposing client session data and configuration endpoints.',
       advisoryUrl: primaryResult.link || 'https://security-advisory.example.com/advisory-102',
@@ -78,9 +75,7 @@ Please respond with a JSON object matching this schema:
 }`
           }
         ];
-        const aiResponse = await chatCompletion(messages, {
-          response_format: { type: 'json_object' }
-        });
+        const aiResponse = await chatCompletion(messages, { response_format: { type: 'json_object' } });
         if (aiResponse) {
           const parsed = JSON.parse(aiResponse);
           if (parsed.vendorName && parsed.impactDescription && parsed.advisoryUrl && Array.isArray(parsed.breachedDataTypes)) {
@@ -91,7 +86,6 @@ Please respond with a JSON object matching this schema:
               advisoryUrl: parsed.advisoryUrl,
               breachedDataTypes: parsed.breachedDataTypes
             };
-            console.log('[Agent 1] Successfully parsed threat payload dynamically using AI/ML API:', threatPayload);
           }
         }
       } catch (e: any) {
@@ -99,61 +93,42 @@ Please respond with a JSON object matching this schema:
       }
     }
 
-    // 4. Validate the payload using Zod
     const validationResult = ThreatPayloadSchema.safeParse(threatPayload);
     if (!validationResult.success) {
       console.error('[Agent 1] Threat validation failed:', validationResult.error.format());
-      return res.status(400).json({
-        error: 'Validation failed',
-        details: validationResult.error.format(),
-      });
+      return res.status(400).json({ error: 'Validation failed', details: validationResult.error.format() });
     }
 
-    console.log('[Agent 1] Threat payload validated successfully.');
-
-    // 5. Store initial state in Supabase 'RAW_DETECTED'
-    const { data: record, error: dbError } = await supabase
-      .from('security_threats_pipeline')
-      .insert({
+    const [record] = await db
+      .insert(securityThreatsPipeline)
+      .values({
         status: 'RAW_DETECTED',
-        threat_source: 'Bright Data SERP API',
-        threat_payload: validationResult.data,
+        threatSource: 'Bright Data SERP API',
+        threatPayload: validationResult.data,
       })
-      .select('id, status')
-      .single();
+      .returning({ id: securityThreatsPipeline.id, status: securityThreatsPipeline.status });
 
-    console.log('[Agent 1] Supabase insert result:', { record, dbError });
-
-    if (dbError) {
-      console.error('[Agent 1] Detailed database insert error:', JSON.stringify(dbError, null, 2), dbError);
-      throw new Error(`Database insert failed: ${dbError.message || JSON.stringify(dbError)}`);
+    if (!record) {
+      throw new Error('Database insert returned no record.');
     }
 
     console.log(`[Agent 1] State logged. Record ID: ${record.id}, Status: ${record.status}`);
 
-    // 6. Propagate state to Agent 2 (Risk Assessment Agent)
     const propagationSuccess = await propagateWebhook('/api/webhook/assess', {
       recordId: record.id,
       status: 'RAW_DETECTED',
     });
 
     if (!propagationSuccess) {
-      // Update record to FAILED if propagation fails
-      await supabase
-        .from('security_threats_pipeline')
-        .update({
-          status: 'FAILED',
-          error_message: 'Failed to propagate threat to Risk Assessment Agent webhook.',
-        })
-        .eq('id', record.id);
-      
+      await db
+        .update(securityThreatsPipeline)
+        .set({ status: 'FAILED', errorMessage: 'Failed to propagate threat to Risk Assessment Agent webhook.', updatedAt: new Date() })
+        .where(eq(securityThreatsPipeline.id, record.id));
+
       return res.status(500).json({ error: 'Propagation failed' });
     }
 
-    return res.status(202).json({
-      message: 'Threat intelligence gathered and pipeline initiated.',
-      recordId: record.id,
-    });
+    return res.status(202).json({ message: 'Threat intelligence gathered and pipeline initiated.', recordId: record.id });
   } catch (error: any) {
     console.error('[Agent 1] Critical error inside cron handler:', error.message || error);
     return res.status(500).json({ error: 'Internal Server Error', message: error.message });
