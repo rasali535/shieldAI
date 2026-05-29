@@ -25,6 +25,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       supabaseUrl: process.env.SUPABASE_URL || 'missing',
       supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'present' : 'missing',
+      brightdataApiKey: process.env.BRIGHTDATA_API_KEY ? 'present' : 'missing',
+      brightdataZone: process.env.BRIGHTDATA_ZONE || 'missing',
       cronSecret: process.env.CRON_SECRET ? 'present' : 'missing',
       aimlApiKey: process.env.AIML_API_KEY ? 'present' : 'missing',
       nodeVersion: process.version,
