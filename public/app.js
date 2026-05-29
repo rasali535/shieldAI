@@ -6,6 +6,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const consoleLogs = document.getElementById('console-logs');
   const vendorSelect = document.getElementById('vendor-select');
   const breachSelect = document.getElementById('breach-select');
+  const customVendorGroup = document.getElementById('custom-vendor-group');
+  const customVendorInput = document.getElementById('custom-vendor-input');
+  const customQueryInput = document.getElementById('custom-query-input');
+  const scrapeUrlInput = document.getElementById('scrape-url-input');
   
   // Pipeline Nodes
   const nodes = {
@@ -209,12 +213,23 @@ document.addEventListener('DOMContentLoaded', () => {
     el.classList.add(state);
   }
 
+  // Toggle custom vendor field
+  vendorSelect.addEventListener('change', () => {
+    if (vendorSelect.value === 'CUSTOM') {
+      customVendorGroup.classList.remove('hidden');
+    } else {
+      customVendorGroup.classList.add('hidden');
+    }
+  });
+
   // Action: Trigger Threat Breach
   btnTrigger.addEventListener('click', async () => {
-    const vendor = vendorSelect.value;
+    const vendor = vendorSelect.value === 'CUSTOM' ? customVendorInput.value : vendorSelect.value;
+    const customQuery = customQueryInput.value;
+    const scrapeUrl = scrapeUrlInput.value;
     const severity = breachSelect.value;
     
-    log(`Triggering Threat Monitor Scan for vendor: "${vendor}" (Mocking Bright Data SERP response)...`, 'info');
+    log(`Triggering Threat Monitor Scan for vendor: "${vendor}"...`, 'info');
     
     // Reset visualizer and buttons
     resetVisualizer();
@@ -225,7 +240,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/cron/monitor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ simulateVendor: vendor, simulateSeverity: severity })
+        body: JSON.stringify({ 
+          customVendor: vendor, 
+          customQuery, 
+          scrapeUrl, 
+          simulateSeverity: severity 
+        })
       });
       
       const data = await res.json();

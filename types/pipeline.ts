@@ -20,6 +20,7 @@ export const ThreatPayloadSchema = z.object({
   impactDescription: z.string().min(10, 'Impact description must be detailed'),
   advisoryUrl: z.string().url('Invalid advisory URL'),
   breachedDataTypes: z.array(z.string()).min(1, 'At least one breached data type must be specified'),
+  scrapeUrl: z.string().url().optional(),
 });
 
 export type ThreatPayload = z.infer<typeof ThreatPayloadSchema>;

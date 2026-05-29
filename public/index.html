@@ -42,8 +42,25 @@
               <option value="AuthVault Inc">AuthVault Inc (Identity Provider)</option>
               <option value="DataFlow Systems">DataFlow Systems (Analytics Pipeline)</option>
               <option value="CoreHost Ltd">CoreHost Ltd (Bare Metal VPS)</option>
+              <option value="CUSTOM">Custom Vendor / Query...</option>
             </select>
           </div>
+          
+          <div class="input-group hidden" id="custom-vendor-group">
+            <label for="custom-vendor-input">Custom Vendor Name</label>
+            <input type="text" id="custom-vendor-input" placeholder="e.g. Auth0" value="Auth0">
+          </div>
+
+          <div class="input-group">
+            <label for="custom-query-input">Threat Search Query (Bright Data SERP)</label>
+            <input type="text" id="custom-query-input" placeholder="e.g. site:security-advisory.example.com vendor data breach" value="site:security-advisory.example.com vendor data breach">
+          </div>
+
+          <div class="input-group">
+            <label for="scrape-url-input">Target URL to Scrape Client Accounts (Bright Data Browser)</label>
+            <input type="url" id="scrape-url-input" placeholder="e.g. https://news.ycombinator.com" value="https://news.ycombinator.com">
+          </div>
+
           <div class="input-group">
             <label for="breach-select">Breach Severity</label>
             <select id="breach-select">
@@ -55,7 +72,7 @@
           
           <button id="btn-trigger" class="btn btn-primary">
             <span class="btn-icon">⚡</span>
-            <span>Simulate Threat Incident</span>
+            <span>Trigger Threat Incident Pipeline</span>
           </button>
           
 

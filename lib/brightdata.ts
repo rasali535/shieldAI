@@ -164,3 +164,42 @@ export function getScrapingBrowserConnectOptions(): { browserWSEndpoint: string 
     browserWSEndpoint: endpoint,
   };
 }
+
+import puppeteer from 'puppeteer-core';
+
+/**
+ * Scrape raw text content from a target URL using Bright Data Scraping Browser.
+ */
+export async function scrapeWebpage(url: string): Promise<string> {
+  const connectOptions = getScrapingBrowserConnectOptions();
+  console.log(`[Bright Data Browser] Connecting to Scraping Browser for URL: ${url}`);
+  
+  let browser;
+  try {
+    browser = await puppeteer.connect({
+      browserWSEndpoint: connectOptions.browserWSEndpoint,
+    });
+    
+    const page = await browser.newPage();
+    page.setDefaultNavigationTimeout(30000);
+    
+    console.log(`[Bright Data Browser] Navigating to: ${url}`);
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    
+    console.log(`[Bright Data Browser] Extracting body text...`);
+    const textContent = await page.evaluate(() => {
+      const scripts = document.querySelectorAll('script, style');
+      scripts.forEach(s => s.remove());
+      return document.body.innerText || '';
+    });
+    
+    return textContent;
+  } catch (error: any) {
+    console.error(`[Bright Data Browser] Failed to scrape webpage:`, error.message || error);
+    throw error;
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}

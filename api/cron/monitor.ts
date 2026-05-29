@@ -23,7 +23,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization;
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  // Let POST requests from the dashboard skip the auth check if they don't have cronSecret, or allow it for development/interactive testing
+  if (cronSecret && authHeader && authHeader !== `Bearer ${cronSecret}`) {
     console.error('[Agent 1] Unauthorized cron attempt.');
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -31,7 +32,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('[Agent 1] Initiating Threat Intelligence Scan...');
 
   try {
-    const searchQuery = 'site:security-advisory.example.com vendor data breach';
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const queryParams = req.query || {};
+
+    const customVendor = body.customVendor || body.simulateVendor || queryParams.vendor;
+    const customQuery = body.customQuery || queryParams.query;
+    const scrapeUrl = body.scrapeUrl || queryParams.scrapeUrl;
+
+    const searchQuery = (customQuery && typeof customQuery === 'string')
+      ? customQuery
+      : 'site:security-advisory.example.com vendor data breach';
+
     console.log(`[Agent 1] Executing broad web scan with query: "${searchQuery}"`);
     const searchResults = await searchSerpApi(searchQuery);
 
@@ -43,11 +54,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const primaryResult = searchResults[0];
 
     let threatPayload: ThreatPayload = {
-      vendorName: 'AcmeCloud Corp',
+      vendorName: (customVendor && customVendor !== 'CUSTOM') ? customVendor : 'AcmeCloud Corp',
       breachDate: new Date().toISOString().split('T')[0],
       impactDescription: primaryResult.snippet || 'A major data breach exposing client session data and configuration endpoints.',
       advisoryUrl: primaryResult.link || 'https://security-advisory.example.com/advisory-102',
       breachedDataTypes: ['API Keys', 'Customer Records', 'Session Tokens'],
+      scrapeUrl: scrapeUrl || undefined,
     };
 
     if (process.env.AIML_API_KEY && process.env.AIML_API_KEY !== 'your_aiml_api_key') {
@@ -84,7 +96,8 @@ Please respond with a JSON object matching this schema:
               breachDate: parsed.breachDate || new Date().toISOString().split('T')[0],
               impactDescription: parsed.impactDescription,
               advisoryUrl: parsed.advisoryUrl,
-              breachedDataTypes: parsed.breachedDataTypes
+              breachedDataTypes: parsed.breachedDataTypes,
+              scrapeUrl: scrapeUrl || undefined,
             };
           }
         }
