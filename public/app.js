@@ -256,6 +256,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Toggle custom vendor field
   vendorSelect.addEventListener('change', () => {
+    if (vendorSelect.value) {
+      // Clear company scrape input and reset hint
+      companyScrapeInput.value = '';
+      const hint = document.querySelector('.company-scrape-group .input-hint');
+      if (hint) hint.innerHTML = 'Type any company name — pipeline will search, enrich, and generate outreach automatically.';
+      
+      // Auto-fill query based on select
+      if (vendorSelect.value !== 'CUSTOM') {
+        customQueryInput.value = `${vendorSelect.value} data breach security advisory vulnerability`;
+      }
+    }
+
     if (vendorSelect.value === 'CUSTOM') {
       customVendorGroup.classList.remove('hidden');
     } else {
@@ -263,7 +275,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Auto-fill the SERP query when company name is typed
+  let resolveUrlTimeout = null;
+
+  // Auto-fill the SERP query and resolve official URL using DeepSeek when company name is typed
   companyScrapeInput.addEventListener('input', () => {
     const company = companyScrapeInput.value.trim();
     if (company) {
@@ -271,6 +285,32 @@ document.addEventListener('DOMContentLoaded', () => {
       // Clear preset select so company input takes priority
       vendorSelect.value = '';
       customVendorGroup.classList.add('hidden');
+
+      // Debounce DeepSeek URL Resolution lookup to avoid excessive API requests
+      if (resolveUrlTimeout) clearTimeout(resolveUrlTimeout);
+      
+      const hint = document.querySelector('.company-scrape-group .input-hint');
+      if (hint) hint.innerHTML = '🔍 Resolving official website URL using DeepSeek...';
+
+      resolveUrlTimeout = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/resolve-url?company=${encodeURIComponent(company)}`);
+          if (!res.ok) throw new Error('Failed to resolve URL');
+          const data = await res.json();
+          if (data.url) {
+            scrapeUrlInput.value = data.url;
+            if (hint) hint.innerHTML = `✅ DeepSeek resolved official URL: <strong style="color: var(--primary);">${data.url}</strong>`;
+            log(`DeepSeek resolved company URL for "${company}": ${data.url}`, 'info');
+          }
+        } catch (err) {
+          console.error('URL resolution failed:', err);
+          if (hint) hint.innerHTML = '⚠️ Custom query set. Type target website URL below if needed.';
+        }
+      }, 1200); // 1.2s debounce
+    } else {
+      if (resolveUrlTimeout) clearTimeout(resolveUrlTimeout);
+      const hint = document.querySelector('.company-scrape-group .input-hint');
+      if (hint) hint.innerHTML = 'Type any company name — pipeline will search, enrich, and generate outreach automatically.';
     }
   });
 
