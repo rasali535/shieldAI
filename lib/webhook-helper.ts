@@ -43,10 +43,10 @@ export async function propagateWebhook(
   payload: { recordId: string; status: string },
   maxRetries = 3
 ): Promise<boolean> {
-  const baseUrl = process.env.URL
-    ? process.env.URL
-    : process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
+  const baseUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
       : process.env.BASE_URL || 'http://localhost:3000';
   
   const targetUrl = `${baseUrl}${endpointPath}`;

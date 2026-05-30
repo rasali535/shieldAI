@@ -32,12 +32,19 @@
       <!-- Control Panel -->
       <section class="panel control-panel glass">
         <h2>System Orchestration</h2>
-        <p class="panel-desc">Trigger autonomous scans or simulate vendor security advisories to run the state-machine workflow.</p>
+        <p class="panel-desc">Enter a company to scrape, or trigger autonomous scans using the configured vendor threat scenarios.</p>
         
         <div class="control-actions">
+          <div class="input-group company-scrape-group">
+            <label for="company-scrape-input">🏢 Company to Scrape</label>
+            <input type="text" id="company-scrape-input" placeholder="e.g. Snowflake, Okta, Cloudflare..." autocomplete="off">
+            <span class="input-hint">Type any company name — pipeline will search, enrich, and generate outreach automatically.</span>
+          </div>
+
           <div class="input-group">
-            <label for="vendor-select">Choose Supplier/Vendor</label>
+            <label for="vendor-select">Choose Preset Supplier/Vendor</label>
             <select id="vendor-select">
+              <option value="">— or select a preset below —</option>
               <option value="AcmeCloud Corp">AcmeCloud Corp (SaaS Cloud)</option>
               <option value="AuthVault Inc">AuthVault Inc (Identity Provider)</option>
               <option value="DataFlow Systems">DataFlow Systems (Analytics Pipeline)</option>

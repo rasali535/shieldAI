@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const customVendorInput = document.getElementById('custom-vendor-input');
   const customQueryInput = document.getElementById('custom-query-input');
   const scrapeUrlInput = document.getElementById('scrape-url-input');
+  const companyScrapeInput = document.getElementById('company-scrape-input');
   
   // Pipeline Nodes
   const nodes = {
@@ -222,9 +223,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Auto-fill the SERP query when company name is typed
+  companyScrapeInput.addEventListener('input', () => {
+    const company = companyScrapeInput.value.trim();
+    if (company) {
+      customQueryInput.value = `${company} data breach security advisory vulnerability`;
+      // Clear preset select so company input takes priority
+      vendorSelect.value = '';
+      customVendorGroup.classList.add('hidden');
+    }
+  });
+
   // Action: Trigger Threat Breach
   btnTrigger.addEventListener('click', async () => {
-    const vendor = vendorSelect.value === 'CUSTOM' ? customVendorInput.value : vendorSelect.value;
+    // Company input takes priority over preset select
+    const companyInput = companyScrapeInput.value.trim();
+    const vendor = companyInput
+      ? companyInput
+      : vendorSelect.value === 'CUSTOM'
+        ? customVendorInput.value
+        : vendorSelect.value || 'AcmeCloud Corp';
     const customQuery = customQueryInput.value;
     const scrapeUrl = scrapeUrlInput.value;
     const severity = breachSelect.value;

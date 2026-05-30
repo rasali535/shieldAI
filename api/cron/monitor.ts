@@ -98,9 +98,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const clean = aiResponse.replace(/```json\n?|```\n?/g, '').trim();
           const parsed = JSON.parse(clean);
           if (parsed.vendorName && parsed.impactDescription && parsed.advisoryUrl && Array.isArray(parsed.breachedDataTypes)) {
+            // Validate date: DeepSeek may return empty string, 'unknown', or wrong format
+            const today = new Date().toISOString().split('T')[0];
+            const dateStr = parsed.breachDate || '';
+            const isValidDate = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !isNaN(Date.parse(dateStr));
             threatPayload = {
               vendorName: parsed.vendorName,
-              breachDate: parsed.breachDate || new Date().toISOString().split('T')[0],
+              breachDate: isValidDate ? dateStr : today,
               impactDescription: parsed.impactDescription,
               advisoryUrl: parsed.advisoryUrl,
               breachedDataTypes: parsed.breachedDataTypes,

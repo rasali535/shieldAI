@@ -220,6 +220,38 @@ body {
   box-shadow: 0 0 8px var(--primary-glow);
 }
 
+/* Company scrape — primary input, visually distinct */
+.company-scrape-group {
+  background: rgba(6, 182, 212, 0.04);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.company-scrape-group label {
+  font-size: 0.85rem !important;
+  color: var(--primary) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+}
+
+.company-scrape-group input {
+  font-size: 1rem !important;
+  padding: 0.75rem 1rem !important;
+  border-color: rgba(6, 182, 212, 0.3) !important;
+}
+
+.company-scrape-group input:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 12px var(--primary-glow) !important;
+}
+
+.input-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
