@@ -46,8 +46,9 @@ export async function searchSerpApi(query: string): Promise<SerpResult[]> {
       },
       body: JSON.stringify({
         zone: BRIGHTDATA_ZONE,
-        url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+        url: `https://www.google.com/search?q=${encodeURIComponent(query)}&num=10`,
         format: 'json',
+        data_format: 'parsed_light',
       }),
     });
 
@@ -56,12 +57,20 @@ export async function searchSerpApi(query: string): Promise<SerpResult[]> {
     }
 
     const data = await response.json();
-    const organic = data.organic_results || [];
+
+    // BrightData may return results under different keys depending on zone/format
+    const organic: any[] = data.organic_results || data.organic || data.results || [];
+
+    if (organic.length === 0) {
+      console.warn('[Bright Data] SERP returned 0 organic results (zone may need parsed_light format or different configuration). Using mock fallback.');
+      return mockResults;
+    }
+
     return organic.map((item: any) => ({
       title: item.title || '',
-      link: item.link || '',
-      snippet: item.snippet || '',
-      source: item.source || '',
+      link: item.link || item.url || '',
+      snippet: item.snippet || item.description || '',
+      source: item.source || item.domain || '',
     }));
   } catch (error: any) {
     console.warn(`Bright Data SERP API call failed (${error.message}). Falling back to mock search results.`);
