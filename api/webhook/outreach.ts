@@ -3,7 +3,7 @@ import { db } from '../../db/index';
 import { securityThreatsPipeline } from '../../db/schema';
 import { OutreachDraftsPayloadSchema, OutreachDraftsPayload } from '../../types/pipeline';
 import { verifySignature } from '../../lib/webhook-helper';
-import { chatCompletion } from '../../lib/aimlapi';
+import { deepSeekCompletion } from '../../lib/aimlapi';
 
 interface VercelRequest {
   method?: string;
@@ -95,16 +95,17 @@ Role: ${primaryContact.role}
 Company: ${target.companyName}
 Tech Stack Signals: ${target.techStackSignals.join(', ')}
 
-Please respond with a JSON object matching this schema:
+Please respond with a JSON object (no markdown, no code fences):
 {
   "subject": "Clear, professional, urgent subject line",
   "body": "Highly professional email body tailored to their role and tech stack."
 }`
               }
             ];
-            const aiResponse = await chatCompletion(messages, { response_format: { type: 'json_object' } });
+            const aiResponse = await deepSeekCompletion(messages, { max_tokens: 1024, temperature: 0.2 });
             if (aiResponse) {
-              const parsed = JSON.parse(aiResponse);
+              const clean = aiResponse.replace(/```json\n?|```\n?/g, '').trim();
+              const parsed = JSON.parse(clean);
               if (parsed.subject && parsed.body) {
                 subject = parsed.subject;
                 body = parsed.body;
