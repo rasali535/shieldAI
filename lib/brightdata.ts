@@ -79,6 +79,37 @@ export async function searchSerpApi(query: string): Promise<SerpResult[]> {
 }
 
 /**
+ * 1b. Parallel SERP Search: Fire multiple queries simultaneously and merge results.
+ * Deduplicates by URL so the caller gets a wider, unique result set at the same
+ * wall-clock latency as a single call.
+ */
+export async function parallelSerpSearch(queries: string[]): Promise<SerpResult[]> {
+  if (queries.length === 0) return [];
+
+  console.log(`[Bright Data] Launching ${queries.length} parallel SERP queries...`);
+
+  const settled = await Promise.allSettled(queries.map(q => searchSerpApi(q)));
+
+  const seen = new Set<string>();
+  const merged: SerpResult[] = [];
+
+  for (const result of settled) {
+    if (result.status === 'fulfilled') {
+      for (const item of result.value) {
+        const key = item.link || item.title;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          merged.push(item);
+        }
+      }
+    }
+  }
+
+  console.log(`[Bright Data] Parallel search complete — ${merged.length} unique results from ${queries.length} queries.`);
+  return merged;
+}
+
+/**
  * 2. Web Unlocker: Fetch raw HTML from highly protected compliance/vendor security pages
  */
 export async function fetchWebUnlocker(targetUrl: string): Promise<string> {

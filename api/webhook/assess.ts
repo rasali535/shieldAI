@@ -3,7 +3,7 @@ import { db } from '../../db/index';
 import { securityThreatsPipeline } from '../../db/schema';
 import { RiskAnalysisSchema, RiskAnalysis } from '../../types/pipeline';
 import { verifySignature, propagateWebhook } from '../../lib/webhook-helper';
-import { chatCompletion } from '../../lib/aimlapi';
+import { deepSeekR1Completion } from '../../lib/aimlapi';
 
 interface VercelRequest {
   method?: string;
@@ -29,7 +29,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  // Hydrate local mock store if database record state is passed in body (for stateless environments)
   if (req.body && req.body.__dbRecord) {
     const { hydrateMockStore } = require('../../db/index');
     hydrateMockStore(req.body.__dbRecord);
@@ -55,63 +54,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const payload = record.threatPayload as any;
     const breachedData: string[] = payload.breachedDataTypes || [];
 
+    // ── Static rule baseline (always computed, AI may override) ────────────
     let score = 50;
     let severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' = 'MEDIUM';
     let complianceImpacts: string[] = ['SOC2'];
     let justification = `Threat involves compromise of ${breachedData.join(', ')} at ${payload.vendorName}, affecting operational compliance controls.`;
 
     if (breachedData.includes('API Keys') || breachedData.includes('Session Tokens')) {
-      score = 95;
-      severity = 'CRITICAL';
+      score = 95; severity = 'CRITICAL';
       complianceImpacts.push('GDPR', 'HIPAA');
     } else if (breachedData.includes('Customer Records')) {
-      score = 80;
-      severity = 'HIGH';
+      score = 80; severity = 'HIGH';
       complianceImpacts.push('GDPR');
     }
 
-    let memoryContextText = 'No previous memory found for this vendor.';
-
+    // ── DeepSeek-R1 risk analysis (chain-of-thought reasoning) ─────────────
     if (process.env.AIML_API_KEY && process.env.AIML_API_KEY !== 'your_aiml_api_key') {
       try {
-        console.log('[Agent 2] Assessing risk dynamically using AI/ML API...');
+        console.log('[Agent 2] Running deep risk analysis with DeepSeek-R1 (chain-of-thought)...');
         const messages = [
           {
             role: 'system' as const,
-            content: 'You are an expert security compliance officer and risk analyst. Analyze the provided vendor breach payload and output risk metadata in strict JSON format.',
+            content: 'You are an expert security compliance officer and risk analyst. Analyse the vendor breach and respond ONLY with a single valid JSON object — no markdown, no explanation, no code fences.',
           },
           {
             role: 'user' as const,
-            content: `Evaluate risk for the following security incident:
-Vendor Name: ${payload.vendorName}
+            content: `Evaluate risk for this security incident:
+Vendor: ${payload.vendorName}
 Breach Date: ${payload.breachDate}
-Breach Impact: ${payload.impactDescription}
+Impact: ${payload.impactDescription}
 Exposed Data: ${breachedData.join(', ')}
 
-Historical Memory Context:
-${memoryContextText}
-
-Please respond with a JSON object matching this schema:
+Return this exact JSON schema:
 {
-  "severity": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+  "severity": "LOW" or "MEDIUM" or "HIGH" or "CRITICAL",
   "complianceImpacts": ["GDPR", "SOC2", "HIPAA", "PCI-DSS", "CCPA"],
-  "score": 0 to 100 integer,
-  "justification": "Detailed explanation"
+  "score": integer 0-100,
+  "justification": "detailed explanation"
 }`
           }
         ];
-        const aiResponse = await chatCompletion(messages, { response_format: { type: 'json_object' } });
+
+        const aiResponse = await deepSeekR1Completion(messages, { max_tokens: 1024, temperature: 0.1 });
+
         if (aiResponse) {
-          const parsed = JSON.parse(aiResponse);
+          const clean = aiResponse.replace(/```json\n?|```\n?/g, '').trim();
+          const parsed = JSON.parse(clean);
           if (parsed.severity && typeof parsed.score === 'number' && parsed.justification) {
-            severity = parsed.severity;
-            score = parsed.score;
+            severity          = parsed.severity;
+            score             = parsed.score;
             complianceImpacts = parsed.complianceImpacts || ['SOC2'];
-            justification = parsed.justification;
+            justification     = parsed.justification;
+            console.log(`[Agent 2] DeepSeek-R1 scored: ${score}/100, severity=${severity}`);
           }
         }
       } catch (e: any) {
-        console.warn('[Agent 2] AI/ML API risk assessment failed, falling back to static rules:', e.message);
+        console.warn('[Agent 2] DeepSeek-R1 assessment failed, using static rules:', e.message);
       }
     }
 
@@ -121,7 +119,6 @@ Please respond with a JSON object matching this schema:
     if (!validationResult.success) {
       throw new Error(`Risk analysis validation failed: ${validationResult.error.message}`);
     }
-
 
     await db
       .update(securityThreatsPipeline)
@@ -140,18 +137,16 @@ Please respond with a JSON object matching this schema:
         .update(securityThreatsPipeline)
         .set({ status: 'FAILED', errorMessage: 'Failed to propagate threat to GTM Enrichment Agent webhook.', updatedAt: new Date() })
         .where(eq(securityThreatsPipeline.id, recordId));
-
       return res.status(500).json({ error: 'Propagation failed' });
     }
 
-    return res.status(200).json({ message: 'Risk assessment complete', recordId });
+    return res.status(200).json({ message: 'Risk assessment complete', recordId, score, severity });
   } catch (error: any) {
     console.error('[Agent 2] Risk evaluation failed:', error.message || error);
     await db
       .update(securityThreatsPipeline)
       .set({ status: 'FAILED', errorMessage: `Agent 2 error: ${error.message || error}`, updatedAt: new Date() })
       .where(eq(securityThreatsPipeline.id, recordId));
-
     return res.status(500).json({ error: 'Internal Server Error', message: error.message });
   }
 }

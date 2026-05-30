@@ -1,10 +1,10 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../../db/index';
 import { securityThreatsPipeline } from '../../db/schema';
-import { searchSerpApi } from '../../lib/brightdata';
+import { parallelSerpSearch } from '../../lib/brightdata';
 import { ThreatPayloadSchema, ThreatPayload } from '../../types/pipeline';
 import { propagateWebhook } from '../../lib/webhook-helper';
-import { chatCompletion } from '../../lib/aimlapi';
+import { deepSeekCompletion } from '../../lib/aimlapi';
 
 interface VercelRequest {
   method?: string;
@@ -23,7 +23,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization;
   const cronSecret = process.env.CRON_SECRET;
 
-  // Let POST requests from the dashboard skip the auth check if they don't have cronSecret, or allow it for development/interactive testing
   if (cronSecret && authHeader && authHeader !== `Bearer ${cronSecret}`) {
     console.error('[Agent 1] Unauthorized cron attempt.');
     return res.status(401).json({ error: 'Unauthorized' });
@@ -36,22 +35,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const queryParams = req.query || {};
 
     const customVendor = body.customVendor || body.simulateVendor || queryParams.vendor;
-    const customQuery = body.customQuery || queryParams.query;
-    const scrapeUrl = body.scrapeUrl || queryParams.scrapeUrl;
+    const customQuery  = body.customQuery  || queryParams.query;
+    const scrapeUrl    = body.scrapeUrl    || queryParams.scrapeUrl;
 
-    const searchQuery = (customQuery && typeof customQuery === 'string')
+    // ── Build a set of parallel search angles for broader coverage ──────────
+    const baseQuery = (customQuery && typeof customQuery === 'string')
       ? customQuery
-      : 'site:security-advisory.example.com vendor data breach';
+      : 'vendor data breach security advisory';
 
-    console.log(`[Agent 1] Executing broad web scan with query: "${searchQuery}"`);
-    const searchResults = await searchSerpApi(searchQuery);
+    const parallelQueries = [
+      baseQuery,
+      `${baseQuery} CVE vulnerability 2024 2025`,
+      `${baseQuery} site:nvd.nist.gov OR site:cve.mitre.org`,
+      `${baseQuery} incident report exposed credentials`,
+    ];
+
+    console.log(`[Agent 1] Firing ${parallelQueries.length} parallel SERP queries for wider coverage...`);
+    const searchResults = await parallelSerpSearch(parallelQueries);
 
     if (searchResults.length === 0) {
       console.log('[Agent 1] Scan complete. No new threat indicators detected.');
       return res.status(200).json({ message: 'No threats detected' });
     }
 
+    // Use the top result as primary, pass context from all results to DeepSeek
     const primaryResult = searchResults[0];
+    const contextSnippets = searchResults
+      .slice(0, 8)
+      .map((r, i) => `[${i + 1}] ${r.title}\n${r.snippet}\n${r.link}`)
+      .join('\n\n');
 
     let threatPayload: ThreatPayload = {
       vendorName: (customVendor && customVendor !== 'CUSTOM') ? customVendor : 'AcmeCloud Corp',
@@ -64,32 +76,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (process.env.AIML_API_KEY && process.env.AIML_API_KEY !== 'your_aiml_api_key') {
       try {
-        console.log('[Agent 1] Analyzing threat indicators with AI/ML API...');
+        console.log('[Agent 1] Analysing threat indicators with DeepSeek-V3 (wide context)...');
         const messages = [
           {
             role: 'system' as const,
-            content: 'You are an advanced Threat Intelligence AI assistant. Analyze the provided web search results and extract security breach details in strict JSON format.',
+            content: 'You are an advanced Threat Intelligence AI. Analyse the provided web search results and extract security breach details. Respond ONLY with a single valid JSON object — no markdown, no explanation.',
           },
           {
             role: 'user' as const,
-            content: `Analyze this search result:
-Title: ${primaryResult.title}
-Link: ${primaryResult.link}
-Snippet: ${primaryResult.snippet}
-
-Please respond with a JSON object matching this schema:
-{
-  "vendorName": "name of vendor breached",
-  "breachDate": "YYYY-MM-DD format (use today's date if not found)",
-  "impactDescription": "detailed impact description (at least 15 characters long describing what happened)",
-  "advisoryUrl": "link to the advisory",
-  "breachedDataTypes": ["array", "of", "breached", "data", "types"]
-}`
+            content: `Analyse the following ${searchResults.length} search results about a security incident:\n\n${contextSnippets}\n\nReturn a JSON object with this exact schema:\n{\n  "vendorName": "name of vendor breached",\n  "breachDate": "YYYY-MM-DD",\n  "impactDescription": "detailed impact description (minimum 15 characters)",\n  "advisoryUrl": "primary advisory URL",\n  "breachedDataTypes": ["array", "of", "data", "types"]\n}`
           }
         ];
-        const aiResponse = await chatCompletion(messages, { response_format: { type: 'json_object' } });
+
+        const aiResponse = await deepSeekCompletion(messages, {
+          max_tokens: 1024,
+          temperature: 0.1,
+        });
+
         if (aiResponse) {
-          const parsed = JSON.parse(aiResponse);
+          // Strip any accidental markdown code fences
+          const clean = aiResponse.replace(/```json\n?|```\n?/g, '').trim();
+          const parsed = JSON.parse(clean);
           if (parsed.vendorName && parsed.impactDescription && parsed.advisoryUrl && Array.isArray(parsed.breachedDataTypes)) {
             threatPayload = {
               vendorName: parsed.vendorName,
@@ -99,10 +106,11 @@ Please respond with a JSON object matching this schema:
               breachedDataTypes: parsed.breachedDataTypes,
               scrapeUrl: scrapeUrl || undefined,
             };
+            console.log(`[Agent 1] DeepSeek extracted: vendor="${threatPayload.vendorName}", date=${threatPayload.breachDate}`);
           }
         }
       } catch (e: any) {
-        console.warn('[Agent 1] AI/ML API parsing failed, falling back to mock structure:', e.message);
+        console.warn('[Agent 1] DeepSeek parsing failed, falling back to primary SERP result:', e.message);
       }
     }
 
@@ -116,7 +124,7 @@ Please respond with a JSON object matching this schema:
       .insert(securityThreatsPipeline)
       .values({
         status: 'RAW_DETECTED',
-        threatSource: 'Bright Data SERP API',
+        threatSource: `Bright Data SERP API (${searchResults.length} results, ${parallelQueries.length} parallel queries)`,
         threatPayload: validationResult.data,
       })
       .returning({ id: securityThreatsPipeline.id, status: securityThreatsPipeline.status });
@@ -141,7 +149,11 @@ Please respond with a JSON object matching this schema:
       return res.status(500).json({ error: 'Propagation failed' });
     }
 
-    return res.status(202).json({ message: 'Threat intelligence gathered and pipeline initiated.', recordId: record.id });
+    return res.status(202).json({
+      message: 'Threat intelligence gathered and pipeline initiated.',
+      recordId: record.id,
+      searchCoverage: { queries: parallelQueries.length, results: searchResults.length },
+    });
   } catch (error: any) {
     console.error('[Agent 1] Critical error inside cron handler:', error.message || error);
     return res.status(500).json({ error: 'Internal Server Error', message: error.message });
