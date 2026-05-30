@@ -315,7 +315,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // B. Update Agent Nodes
-    const status = record.status;
     resetVisualizer();
 
     if (status === 'RAW_DETECTED') {
