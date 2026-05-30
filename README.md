@@ -35,6 +35,20 @@ Because Vercel Serverless Functions have strict execution limits, the platform a
 
 ---
 
+## 💎 Advanced Features
+
+### 🔍 DeepSeek Company URL Resolver
+When a user types a target company name in the orchestrator panel, a debounced handler requests `/api/resolve-url`. The endpoint uses the **Bright Data SERP API** to look up search listings for the official homepages, and feeds the top listings to **DeepSeek** to select the precise official domain. The orchestrator then automatically populates the scraping target URL input.
+
+### 🌐 Layman-Friendly Interactive UI
+To ensure that threat intelligence is accessible to non-technical users, the dashboard features a **Layman Mode** on all details tabs:
+- **Incident Reports**: Converts raw JSON feeds into easy-to-read cards outlining target companies, dates, and sources.
+- **Impact Evaluation**: Features high-visibility risk score dials, colored severity badges, and structured regulatory compliance chips (e.g. GDPR, CCPA, SOC2) with plain-English justifications.
+- **Client Accounts**: Renders target contacts and technology stacks in structured HTML tables.
+- **Developer JSON Toggles**: Simple buttons that allow developers to toggle the underlying raw JSON schemas when debugging.
+
+---
+
 ## 🚀 Getting Started
 
 ### 1. Prerequisite Environment Variables
@@ -48,6 +62,7 @@ SUPABASE_URL=your_supabase_url
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 SHIELDRADIUS_SECRET_KEY=your_webhook_hmac_secret
 BASE_URL=http://localhost:3000
+AIML_API_KEY=your_aiml_api_key
 ```
 
 ### 2. Install Dependencies
@@ -67,3 +82,4 @@ Run the E2E TypeScript test runner to test database mock state-transitions and Z
 ```bash
 npm test
 ```
+

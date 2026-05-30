@@ -157,11 +157,21 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateUIState(record) {
     if (!record) return;
 
+    // Normalize keys to support both camelCase and snake_case API response formats
+    const status = record.status;
+    const threatPayload = record.threat_payload || record.threatPayload;
+    const threatSource = record.threatSource || record.threat_source || 'Bright Data intelligence feed';
+    const riskAnalysis = record.risk_analysis || record.riskAnalysis;
+    const riskScore = record.risk_score !== undefined ? record.risk_score : (record.riskScore !== undefined ? record.riskScore : null);
+    const brightdataJobId = record.brightdata_job_id || record.brightdataJobId;
+    const enrichedTargets = record.enriched_targets || record.enrichedTargets;
+    const outreachDrafts = record.outreach_drafts || record.outreachDrafts;
+
     // A. Update details panels
-    if (record.threat_payload) {
-      threatJson.textContent = JSON.stringify(record.threat_payload, null, 2);
+    if (threatPayload) {
+      threatJson.textContent = JSON.stringify(threatPayload, null, 2);
       
-      const payload = record.threat_payload;
+      const payload = threatPayload;
       threatLayman.innerHTML = `
         <div class="layman-card">
           <h4>🚨 Security Incident Report</h4>
@@ -176,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="layman-prop">
               <span class="layman-prop-label">Source System</span>
-              <span class="layman-prop-value" style="color: var(--primary);">${record.threatSource || 'Bright Data intelligence feed'}</span>
+              <span class="layman-prop-value" style="color: var(--primary);">${threatSource}</span>
             </div>
           </div>
           <div class="layman-desc">
@@ -189,18 +199,18 @@ document.addEventListener('DOMContentLoaded', () => {
       threatLayman.innerHTML = `<p class="text-muted">No threat detected yet. Run the simulation to view threat report.</p>`;
     }
     
-    if (record.risk_analysis) {
-      riskJson.textContent = JSON.stringify(record.risk_analysis, null, 2);
-      riskScoreValue.textContent = record.risk_score || '-';
+    if (riskAnalysis) {
+      riskJson.textContent = JSON.stringify(riskAnalysis, null, 2);
+      riskScoreValue.textContent = riskScore !== null ? riskScore : '-';
       
-      const severity = record.risk_analysis.severity || 'NONE';
+      const severity = riskAnalysis.severity || 'NONE';
       riskSeverityBadge.textContent = severity;
       riskSeverityBadge.className = 'badge';
       if (severity === 'CRITICAL') riskSeverityBadge.classList.add('badge-danger');
       else if (severity === 'HIGH') riskSeverityBadge.classList.add('badge-warning');
       else riskSeverityBadge.classList.add('badge-success');
 
-      const analysis = record.risk_analysis;
+      const analysis = riskAnalysis;
       const chips = (analysis.complianceImpacts || [])
         .map(c => `<span class="compliance-chip">${c}</span>`)
         .join(' ');
@@ -211,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="layman-grid">
             <div class="layman-prop">
               <span class="layman-prop-label">Evaluated Score</span>
-              <span class="layman-prop-value" style="font-size: 1.2rem; font-weight: bold; color: ${severity === 'CRITICAL' ? '#ef4444' : severity === 'HIGH' ? '#f97316' : '#10b981'}">${record.risk_score || '-'}/100</span>
+              <span class="layman-prop-value" style="font-size: 1.2rem; font-weight: bold; color: ${severity === 'CRITICAL' ? '#ef4444' : severity === 'HIGH' ? '#f97316' : '#10b981'}">${riskScore !== null ? riskScore : '-'}/100</span>
             </div>
             <div class="layman-prop">
               <span class="layman-prop-label">Regulatory Standards Affected</span>
@@ -231,18 +241,18 @@ document.addEventListener('DOMContentLoaded', () => {
       riskLayman.innerHTML = `<p class="text-muted">Awaiting risk assessor evaluation...</p>`;
     }
 
-    if (record.brightdata_job_id) {
-      activeJobId = record.brightdata_job_id;
+    if (brightdataJobId) {
+      activeJobId = brightdataJobId;
       brightdataJobIdDisplay.textContent = activeJobId;
       scrapeJobPanel.classList.remove('hidden');
     } else {
       scrapeJobPanel.classList.add('hidden');
     }
 
-    if (record.enriched_targets && record.enriched_targets.length > 0) {
-      enrichmentJson.textContent = JSON.stringify(record.enriched_targets, null, 2);
+    if (enrichedTargets && enrichedTargets.length > 0) {
+      enrichmentJson.textContent = JSON.stringify(enrichedTargets, null, 2);
 
-      const rows = record.enriched_targets.map(target => {
+      const rows = enrichedTargets.map(target => {
         const primaryContact = target.contacts?.[0] || { name: 'IT Security Lead', role: 'Security Manager', email: 'security@company.com' };
         const tags = (target.techStackSignals || [])
           .map(t => `<span class="tech-tag">${t}</span>`)
@@ -287,9 +297,9 @@ document.addEventListener('DOMContentLoaded', () => {
       enrichmentLayman.innerHTML = `<p class="text-muted">Awaiting target enrichment execution...</p>`;
     }
 
-    if (record.outreach_drafts && record.outreach_drafts.length > 0) {
+    if (outreachDrafts && outreachDrafts.length > 0) {
       outreachContainer.innerHTML = '';
-      record.outreach_drafts.forEach(draft => {
+      outreachDrafts.forEach(draft => {
         const card = document.createElement('div');
         card.className = 'outreach-card';
         card.innerHTML = `
