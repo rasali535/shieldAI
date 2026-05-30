@@ -181,7 +181,15 @@
         <div class="tab-content" id="tab-threat">
           <h3>Ingested Threat Payload</h3>
           <p class="tab-desc">Validated by Zod schema inside `/api/cron/monitor` (Agent 1).</p>
-          <pre class="json-viewer" id="threat-json">No threat detected yet. Run the simulation to view the raw threat payload.</pre>
+          
+          <div id="threat-layman-view" class="layman-view">
+            <p class="text-muted">No threat detected yet. Run the simulation to view threat report.</p>
+          </div>
+          
+          <div class="developer-json-toggle">
+            <button class="btn btn-secondary toggle-json-btn" data-target="threat-json">🔍 Toggle Developer JSON</button>
+          </div>
+          <pre class="json-viewer hidden" id="threat-json">No threat detected yet. Run the simulation to view the raw threat payload.</pre>
         </div>
 
         <div class="tab-content hidden" id="tab-risk">
@@ -197,7 +205,15 @@
               <span class="badge" id="risk-severity-badge">None</span>
             </div>
           </div>
-          <pre class="json-viewer" id="risk-json">Awaiting risk assessor execution...</pre>
+          
+          <div id="risk-layman-view" class="layman-view">
+            <p class="text-muted">Awaiting risk assessor evaluation...</p>
+          </div>
+          
+          <div class="developer-json-toggle">
+            <button class="btn btn-secondary toggle-json-btn" data-target="risk-json">🔍 Toggle Developer JSON</button>
+          </div>
+          <pre class="json-viewer hidden" id="risk-json">Awaiting risk assessor execution...</pre>
         </div>
 
         <div class="tab-content hidden" id="tab-enrichment">
@@ -208,7 +224,15 @@
             <code id="brightdata-job-id-display">bd_job_xxxx</code>
             <button id="btn-simulate-callback" class="btn btn-secondary">Force Scraper Webhook Callback</button>
           </div>
-          <pre class="json-viewer" id="enrichment-json">Awaiting target enrichment execution...</pre>
+          
+          <div id="enrichment-layman-view" class="layman-view">
+            <p class="text-muted">Awaiting target enrichment execution...</p>
+          </div>
+          
+          <div class="developer-json-toggle">
+            <button class="btn btn-secondary toggle-json-btn" data-target="enrichment-json">🔍 Toggle Developer JSON</button>
+          </div>
+          <pre class="json-viewer hidden" id="enrichment-json">Awaiting target enrichment execution...</pre>
         </div>
 
         <div class="tab-content hidden" id="tab-outreach">

@@ -28,12 +28,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Details Panes
   const threatJson = document.getElementById('threat-json');
+  const threatLayman = document.getElementById('threat-layman-view');
   const riskJson = document.getElementById('risk-json');
+  const riskLayman = document.getElementById('risk-layman-view');
   const riskScoreValue = document.getElementById('risk-score-value');
   const riskSeverityBadge = document.getElementById('risk-severity-badge');
   const scrapeJobPanel = document.getElementById('scrape-job-panel');
   const brightdataJobIdDisplay = document.getElementById('brightdata-job-id-display');
   const enrichmentJson = document.getElementById('enrichment-json');
+  const enrichmentLayman = document.getElementById('enrichment-layman-view');
   const outreachContainer = document.getElementById('outreach-drafts-container');
 
   // State
@@ -53,6 +56,20 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.classList.add('active');
       const tabId = btn.getAttribute('data-tab');
       document.getElementById(tabId).classList.remove('hidden');
+    });
+  });
+
+  // Toggle Developer JSON display
+  document.querySelectorAll('.toggle-json-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.getAttribute('data-target');
+      const targetEl = document.getElementById(targetId);
+      if (targetEl) {
+        targetEl.classList.toggle('hidden');
+        btn.textContent = targetEl.classList.contains('hidden')
+          ? '🔍 Toggle Developer JSON'
+          : '👁️ Hide Developer JSON';
+      }
     });
   });
 
@@ -143,6 +160,33 @@ document.addEventListener('DOMContentLoaded', () => {
     // A. Update details panels
     if (record.threat_payload) {
       threatJson.textContent = JSON.stringify(record.threat_payload, null, 2);
+      
+      const payload = record.threat_payload;
+      threatLayman.innerHTML = `
+        <div class="layman-card">
+          <h4>🚨 Security Incident Report</h4>
+          <div class="layman-grid">
+            <div class="layman-prop">
+              <span class="layman-prop-label">Target Company/Vendor</span>
+              <span class="layman-prop-value">${payload.vendor || 'N/A'}</span>
+            </div>
+            <div class="layman-prop">
+              <span class="layman-prop-label">Detected Threat Date</span>
+              <span class="layman-prop-value">${payload.detectedAt || 'N/A'}</span>
+            </div>
+            <div class="layman-prop">
+              <span class="layman-prop-label">Source System</span>
+              <span class="layman-prop-value" style="color: var(--primary);">${record.threatSource || 'Bright Data intelligence feed'}</span>
+            </div>
+          </div>
+          <div class="layman-desc">
+            <strong>Description:</strong> ${payload.description || 'No description provided.'}
+          </div>
+        </div>
+      `;
+    } else {
+      threatJson.textContent = 'No threat detected yet. Run the simulation to view the raw threat payload.';
+      threatLayman.innerHTML = `<p class="text-muted">No threat detected yet. Run the simulation to view threat report.</p>`;
     }
     
     if (record.risk_analysis) {
@@ -155,6 +199,36 @@ document.addEventListener('DOMContentLoaded', () => {
       if (severity === 'CRITICAL') riskSeverityBadge.classList.add('badge-danger');
       else if (severity === 'HIGH') riskSeverityBadge.classList.add('badge-warning');
       else riskSeverityBadge.classList.add('badge-success');
+
+      const analysis = record.risk_analysis;
+      const chips = (analysis.complianceImpacts || [])
+        .map(c => `<span class="compliance-chip">${c}</span>`)
+        .join(' ');
+
+      riskLayman.innerHTML = `
+        <div class="layman-card">
+          <h4>⚖️ Impact Evaluation</h4>
+          <div class="layman-grid">
+            <div class="layman-prop">
+              <span class="layman-prop-label">Evaluated Score</span>
+              <span class="layman-prop-value" style="font-size: 1.2rem; font-weight: bold; color: ${severity === 'CRITICAL' ? '#ef4444' : severity === 'HIGH' ? '#f97316' : '#10b981'}">${record.risk_score || '-'}/100</span>
+            </div>
+            <div class="layman-prop">
+              <span class="layman-prop-label">Regulatory Standards Affected</span>
+              <div class="compliance-chips">${chips || '<span class="text-muted">None</span>'}</div>
+            </div>
+          </div>
+          <div class="layman-desc" style="border-left-color: #8b5cf6;">
+            <strong>Executive Justification:</strong> ${analysis.justification || 'No evaluation details provided.'}
+          </div>
+        </div>
+      `;
+    } else {
+      riskJson.textContent = 'Awaiting risk assessor execution...';
+      riskScoreValue.textContent = '-';
+      riskSeverityBadge.textContent = 'None';
+      riskSeverityBadge.className = 'badge';
+      riskLayman.innerHTML = `<p class="text-muted">Awaiting risk assessor evaluation...</p>`;
     }
 
     if (record.brightdata_job_id) {
@@ -167,8 +241,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (record.enriched_targets && record.enriched_targets.length > 0) {
       enrichmentJson.textContent = JSON.stringify(record.enriched_targets, null, 2);
+
+      const rows = record.enriched_targets.map(target => {
+        const primaryContact = target.contacts?.[0] || { name: 'IT Security Lead', role: 'Security Manager', email: 'security@company.com' };
+        const tags = (target.techStackSignals || [])
+          .map(t => `<span class="tech-tag">${t}</span>`)
+          .join('');
+        return `
+          <tr>
+            <td>
+              <strong>${target.companyName}</strong><br>
+              <a href="${target.domain}" target="_blank" style="font-size: 0.75rem; color: var(--primary); text-decoration: none;">${target.domain}</a>
+            </td>
+            <td>${tags || '<span class="text-muted">No signals</span>'}</td>
+            <td>
+              <strong>${primaryContact.name}</strong><br>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">${primaryContact.role}</span>
+            </td>
+            <td>
+              <code style="color: #c084fc; font-size: 0.75rem;">${primaryContact.email}</code>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      enrichmentLayman.innerHTML = `
+        <div class="layman-table-wrapper" style="margin-top: 1rem;">
+          <table class="layman-table">
+            <thead>
+              <tr>
+                <th>Customer / Account</th>
+                <th>Tech Signals</th>
+                <th>Target Contact</th>
+                <th>Outreach Channel</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+      `;
     } else {
-      enrichmentJson.textContent = 'Awaiting callback data...';
+      enrichmentJson.textContent = 'Awaiting target enrichment execution...';
+      enrichmentLayman.innerHTML = `<p class="text-muted">Awaiting target enrichment execution...</p>`;
     }
 
     if (record.outreach_drafts && record.outreach_drafts.length > 0) {
