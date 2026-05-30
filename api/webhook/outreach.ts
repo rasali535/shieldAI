@@ -139,10 +139,16 @@ Please respond with a JSON object (no markdown, no code fences):
 
     console.log(`[Agent 4] Outreach successfully compiled for ${validationResult.data.length} targets. Pipeline complete!`);
 
+    const [finalRecord] = await db
+      .select()
+      .from(securityThreatsPipeline)
+      .where(eq(securityThreatsPipeline.id, recordId));
+
     return res.status(200).json({
       message: 'Autonomous outreach briefs generated successfully. Pipeline execution complete.',
       recordId,
       draftCount: validationResult.data.length,
+      record: finalRecord,
     });
   } catch (error: any) {
     console.error('[Agent 4] Outreach compilation failed:', error.message || error);

@@ -127,12 +127,12 @@ Return this exact JSON schema:
 
     console.log(`[Agent 2] Risk assessment completed. Score: ${score}, Severity: ${severity}`);
 
-    const propagationSuccess = await propagateWebhook('/api/webhook/enrich', {
+    const result = await propagateWebhook('/api/webhook/enrich', {
       recordId,
       status: 'RISK_QUALIFIED',
     });
 
-    if (!propagationSuccess) {
+    if (!result) {
       await db
         .update(securityThreatsPipeline)
         .set({ status: 'FAILED', errorMessage: 'Failed to propagate threat to GTM Enrichment Agent webhook.', updatedAt: new Date() })
@@ -140,7 +140,16 @@ Return this exact JSON schema:
       return res.status(500).json({ error: 'Propagation failed' });
     }
 
-    return res.status(200).json({ message: 'Risk assessment complete', recordId, score, severity });
+    let finalRecord = typeof result === 'object' ? result : null;
+    if (!finalRecord) {
+      const [rec] = await db
+        .select()
+        .from(securityThreatsPipeline)
+        .where(eq(securityThreatsPipeline.id, recordId));
+      finalRecord = rec;
+    }
+
+    return res.status(200).json({ message: 'Risk assessment complete', recordId, score, severity, record: finalRecord });
   } catch (error: any) {
     console.error('[Agent 2] Risk evaluation failed:', error.message || error);
     await db

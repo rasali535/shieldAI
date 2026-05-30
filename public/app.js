@@ -96,6 +96,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Simulated real-time progression for stateless serverless environments
+  async function animateLocalRecord(record) {
+    stopPolling();
+    const statuses = ['RAW_DETECTED', 'RISK_QUALIFIED', 'TARGETS_ENRICHED', 'OUTREACH_GENERATED'];
+    
+    const finalStatus = record.status || 'OUTREACH_GENERATED';
+    const finalIndex = statuses.indexOf(finalStatus);
+    const stepsToAnimate = finalIndex >= 0 ? statuses.slice(0, finalIndex + 1) : [finalStatus];
+    
+    for (const status of stepsToAnimate) {
+      const tempRecord = JSON.parse(JSON.stringify(record));
+      tempRecord.status = status;
+      
+      if (status === 'RAW_DETECTED') {
+        tempRecord.risk_analysis = null;
+        tempRecord.risk_score = null;
+        tempRecord.enriched_targets = null;
+        tempRecord.outreach_drafts = null;
+        log('Agent 1: Threat Intelligence Scan completed.', 'success');
+      } else if (status === 'RISK_QUALIFIED') {
+        tempRecord.enriched_targets = null;
+        tempRecord.outreach_drafts = null;
+        log('Agent 2: Risk Assessment evaluation completed.', 'success');
+      } else if (status === 'TARGETS_ENRICHED') {
+        tempRecord.outreach_drafts = null;
+        log('Agent 3: GTM Enrichment completed.', 'success');
+      } else if (status === 'OUTREACH_GENERATED') {
+        log('Agent 4: Outreach compiler completed. Pipeline finished!', 'success');
+      } else if (status === 'FAILED') {
+        log('Pipeline execution failed.', 'danger');
+      }
+      
+      updateUIState(tempRecord);
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
+    
+    // Render the final record to ensure all panels are fully updated
+    updateUIState(record);
+  }
+
   // Update visual elements depending on active pipeline status
   function updateUIState(record) {
     if (!record) return;
@@ -274,7 +314,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       currentRecordId = data.recordId;
       log(`State machine pipeline initiated. DB record: ${currentRecordId}`, 'success');
-      startPolling(currentRecordId);
+      
+      if (data.record) {
+        animateLocalRecord(data.record);
+      } else {
+        startPolling(currentRecordId);
+      }
 
     } catch (err) {
       log(`Trigger error: ${err.message}`, 'danger');

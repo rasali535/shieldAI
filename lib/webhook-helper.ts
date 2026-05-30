@@ -42,7 +42,7 @@ export async function propagateWebhook(
   endpointPath: string, // e.g., '/api/webhook/assess'
   payload: { recordId: string; status: string },
   maxRetries = 3
-): Promise<boolean> {
+): Promise<any> {
   const baseUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
     : process.env.VERCEL_URL
@@ -91,6 +91,11 @@ export async function propagateWebhook(
       if (response.ok) {
         console.log(`[Webhook Propagator] Transition successfully accepted by ${targetUrl} (Status: ${response.status})`);
         
+        let responseData: any = null;
+        try {
+          responseData = await response.json();
+        } catch (_) {}
+
         // Trigger event-driven workflow automation in TriggerWare.ai
         const eventName = `pipeline.${payload.status.toLowerCase()}`;
         try {
@@ -99,7 +104,7 @@ export async function propagateWebhook(
           console.warn('[Webhook Propagator] TriggerWare automation trigger failed:', twError.message);
         }
 
-        return true;
+        return (responseData && responseData.record) ? responseData.record : true;
       }
 
       console.warn(`[Webhook Propagator] ${targetUrl} returned status ${response.status}. Retrying...`);
@@ -115,5 +120,5 @@ export async function propagateWebhook(
   }
 
   console.error(`[Webhook Propagator] Failed to propagate state to ${targetUrl} after ${maxRetries} attempts.`);
-  return false;
+  return null;
 }

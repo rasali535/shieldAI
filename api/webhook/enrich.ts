@@ -195,12 +195,12 @@ ${scrapedText.substring(0, 6000)}`;
 
     console.log(`[Agent 3] Targets enriched. Propagating to Outreach...`);
 
-    const propagationSuccess = await propagateWebhook('/api/webhook/outreach', {
+    const result = await propagateWebhook('/api/webhook/outreach', {
       recordId,
       status: 'TARGETS_ENRICHED',
     });
 
-    if (!propagationSuccess) {
+    if (!result) {
       await db
         .update(securityThreatsPipeline)
         .set({ status: 'FAILED', errorMessage: 'Failed to propagate enriched targets to Outreach Agent.', updatedAt: new Date() })
@@ -208,11 +208,21 @@ ${scrapedText.substring(0, 6000)}`;
       return res.status(500).json({ error: 'Outreach propagation failed' });
     }
 
+    let finalRecord = typeof result === 'object' ? result : null;
+    if (!finalRecord) {
+      const [rec] = await db
+        .select()
+        .from(securityThreatsPipeline)
+        .where(eq(securityThreatsPipeline.id, recordId));
+      finalRecord = rec;
+    }
+
     return res.status(200).json({
       message: 'Enrichment completed and propagated.',
       recordId,
       source: scrapingSource,
-      targetsCount: validationResult.data.length
+      targetsCount: validationResult.data.length,
+      record: finalRecord
     });
 
   } catch (error: any) {

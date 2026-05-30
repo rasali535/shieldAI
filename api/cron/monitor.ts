@@ -139,12 +139,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log(`[Agent 1] State logged. Record ID: ${record.id}, Status: ${record.status}`);
 
-    const propagationSuccess = await propagateWebhook('/api/webhook/assess', {
+    const result = await propagateWebhook('/api/webhook/assess', {
       recordId: record.id,
       status: 'RAW_DETECTED',
     });
 
-    if (!propagationSuccess) {
+    if (!result) {
       await db
         .update(securityThreatsPipeline)
         .set({ status: 'FAILED', errorMessage: 'Failed to propagate threat to Risk Assessment Agent webhook.', updatedAt: new Date() })
@@ -153,10 +153,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'Propagation failed' });
     }
 
-    return res.status(202).json({
-      message: 'Threat intelligence gathered and pipeline initiated.',
+    let finalRecord = typeof result === 'object' ? result : null;
+    if (!finalRecord) {
+      const [rec] = await db
+        .select()
+        .from(securityThreatsPipeline)
+        .where(eq(securityThreatsPipeline.id, record.id));
+      finalRecord = rec;
+    }
+
+    return res.status(200).json({
+      message: 'Threat intelligence gathered and pipeline completed.',
       recordId: record.id,
       searchCoverage: { queries: parallelQueries.length, results: searchResults.length },
+      record: finalRecord,
     });
   } catch (error: any) {
     console.error('[Agent 1] Critical error inside cron handler:', error.message || error);
